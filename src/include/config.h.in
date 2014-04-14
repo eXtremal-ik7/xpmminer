@@ -1,0 +1,20 @@
+#ifndef __CONFIG_H_
+#define __CONFIG_H_
+
+#define IS_BIGENDIAN ${IS_BIGENDIAN}
+
+#ifdef __cplusplus
+inline bool is_bigendian() {
+  return IS_BIGENDIAN;
+}
+#endif  //__cplusplus
+
+#cmakedefine OS_WINDOWS
+#cmakedefine OS_LINUX
+#cmakedefine OS_DARWIN
+#cmakedefine OS_FREEBSD
+#cmakedefine OS_COMMONUNIX
+
+#cmakedefine CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}"
+
+#endif //__CONFIG_H_
