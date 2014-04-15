@@ -32,9 +32,9 @@ But before this, you must fetch all dependencies:
 
 4. Usage
 
-- Run official primecoin client with RPC support. Examples:
-  primecoind -rpcuser=<userName> -rpcpassword=<password>
-  primecoin-qt -rpcuser=<userName> -rpcpassword=<password> -server
+- Run official primecoin client with RPC support. Examples:<BR>
+  primecoind -rpcuser=userName -rpcpassword=password<BR>
+  primecoin-qt -rpcuser=userName -rpcpassword=password -server<BR>
   
 - Run CPU or GPU miner:
 
