@@ -29,6 +29,7 @@ But before this, you must fetch all dependencies:
  - curl
  - jansson
  - OpenCL implementation
+   - AMD: APP SDK 2.9 Required
 
 4. Usage
 
