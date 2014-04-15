@@ -23,8 +23,7 @@ size_t GetBlockTemplateContext::curlWriteCallback(void *ptr,
                                                   size_t nmemb,
                                                   GetBlockTemplateContext *ctx)
 {
-  std::string S((const char*)ptr, size*nmemb);
-  ctx->updateWork(S);
+  ctx->_response.append((char*)ptr, size*nmemb);
   return size*nmemb;
 }
 
@@ -50,16 +49,17 @@ const char *set_b58addr(const char *arg, _cbscript_t *p)
   return 0;
 }
 
-void GetBlockTemplateContext::updateWork(const std::string &S)
+void GetBlockTemplateContext::updateWork()
 {
   MutexLocker locker(&_mutex);
   
   _blockTemplateExists = false;
   const char *error;  
   json_error_t jsonError;
-  json_t *response = json_loads(S.c_str(), 0, &jsonError);
+  json_t *response = json_loads(_response.c_str(), 0, &jsonError);
   if (!response) {
     fprintf(stderr, " * Error: getblocktemplate response JSON parsing error\n");
+    fprintf(stderr, "%s\n", _response.c_str());
     return;
   }
   
@@ -143,9 +143,13 @@ void GetBlockTemplateContext::queryWork()
   curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request);
   
   while (1) {
-    if (curl_easy_perform(curl) != CURLE_OK)
+    _response.clear();
+    if (curl_easy_perform(curl) != CURLE_OK) {
       fprintf(stderr, "curl_easy_perform ERROR\n");
-    sleep(_timeout);
+    } else {
+      updateWork();
+    }
+    sleep(1);
   }
 }
 
@@ -190,25 +194,25 @@ blktemplate_t *GetBlockTemplateContext::get(unsigned blockIdx, blktemplate_t *ol
 size_t SubmitContext::curlWriteCallback(void *ptr,
                                         size_t size,
                                         size_t nmemb,
-                                        void *arg)
+                                        SubmitContext *ctx)
 {
-  std::string S((const char*)ptr, size*nmemb);
-  fprintf(stderr, "submit response: %s\n", S.c_str());
+  ctx->_response.append((char*)ptr, size*nmemb);
   return size*nmemb;
 }
 
 
-SubmitContext::SubmitContext()
+SubmitContext::SubmitContext(const char *url, const char *user, const char *password) :
+  _url(url), _user(user), _password(password)
 {
   curl_slist *header = curl_slist_append(0, "User-Agent: xpmminer");
   curl_slist_append(header, "Content-Type: application/json");
   
   curl = curl_easy_init();
-  curl_easy_setopt(curl, CURLOPT_URL, "http://127.0.0.1:9999");
+  curl_easy_setopt(curl, CURLOPT_URL, _url);
   curl_easy_setopt(curl, CURLOPT_POST, 1L);
   curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
-  curl_easy_setopt(curl, CURLOPT_USERNAME, "user");
-  curl_easy_setopt(curl, CURLOPT_PASSWORD, "12345678");
+  curl_easy_setopt(curl, CURLOPT_USERNAME, _user);
+  curl_easy_setopt(curl, CURLOPT_PASSWORD, _password);
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteCallback);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, this);  
@@ -228,10 +232,14 @@ void SubmitContext::submitBlock(blktemplate_t *blockTemplate,
   char *request = json_dumps(jsonBlock, JSON_INDENT(2));
   json_delete(jsonBlock);
   
+  _response.clear();
   fprintf(stderr, "submit request: %s\n", request);
   curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request);
-  if (curl_easy_perform(curl) != CURLE_OK)
+  if (curl_easy_perform(curl) != CURLE_OK) {
     fprintf(stderr, "curl_easy_perform ERROR\n");
+  } else {
+    fprintf(stderr, "%s\n", _response.c_str());
+  }
   
   free(request);
 }

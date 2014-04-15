@@ -25,6 +25,7 @@ private:
   unsigned _dataId;
   
   pthread_mutex_t _mutex;
+  std::string _response;
   
 private:
   static void *queryWorkThreadProc(void *arg);
@@ -35,7 +36,7 @@ private:
   
 private:
   void queryWork();
-  void updateWork(const std::string &S);
+  void updateWork();
   
 public:
   GetBlockTemplateContext(const char *url,
@@ -52,15 +53,19 @@ public:
 class SubmitContext { 
 private:
   CURL *curl;
+  std::string _response;
+  const char *_url;
+  const char *_user;
+  const char *_password;
   
   static size_t curlWriteCallback(void *ptr,
                                   size_t size,
                                   size_t nmemb,
-                                  void *arg);
+                                  SubmitContext *ctx);
   
   
 public:
-  SubmitContext();
+  SubmitContext(const char *url, const char *user, const char *password);
   void submitBlock(blktemplate_t *blockTemplate,
                    const PrimecoinBlockHeader &header,
                    unsigned dataId);

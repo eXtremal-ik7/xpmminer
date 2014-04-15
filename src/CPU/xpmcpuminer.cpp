@@ -258,6 +258,7 @@ void benchmark(double difficulty)
 struct MineContext {
   PrimeSource *primeSource;
   GetBlockTemplateContext *gbp;
+  SubmitContext *submit;
   unsigned threadIdx;
   uint64_t totalRoundsNum; 
   uint64_t foundChains[20];
@@ -279,7 +280,6 @@ void *mine(void *arg)
   const unsigned checkInterval = 8;
   double roundSizeInGb = checkInterval*realSieveSize / 1000000000.0;
   unsigned roundsNum = 0;    
-  SubmitContext submitCtx;
   
   PrimorialFast(gPrimorial, primorial, *ctx->primeSource);
   std::unique_ptr<CSieveOfEratosthenesL1Ext> sieve(
@@ -338,7 +338,7 @@ void *mine(void *arg)
         fprintf(stderr, "%02X", (unsigned)hash[i]);
       fprintf(stderr, "\n");
     
-      submitCtx.submitBlock(workTemplate, work, dataId);
+      ctx->submit->submitBlock(workTemplate, work, dataId);
     }
       
     roundsNum++;
@@ -472,7 +472,7 @@ int main(int argc, char **argv)
     return 0;
   }
  
-  GetBlockTemplateContext ctx(gUrl, gUserName, gPassword, gWallet, 8, gThreadsNum, extraNonce);
+  GetBlockTemplateContext ctx(gUrl, gUserName, gPassword, gWallet, 4, gThreadsNum, extraNonce);
   ctx.run();
   
   MineContext *mineCtx = new MineContext[gThreadsNum];
@@ -483,6 +483,7 @@ int main(int argc, char **argv)
     mineCtx[i].threadIdx = i;
     mineCtx[i].totalRoundsNum = 0;
     memset(mineCtx[i].foundChains, 0, sizeof(mineCtx->foundChains));
+    mineCtx[i].submit = new SubmitContext(gUrl, gUserName, gPassword);
     pthread_create(&thread, 0, mine, &mineCtx[i]);
   }
   

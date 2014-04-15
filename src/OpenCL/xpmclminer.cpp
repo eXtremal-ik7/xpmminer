@@ -96,6 +96,7 @@ void primorialsPrint(unsigned count)
 struct MineContext {
   PrimeSource *primeSource;
   GetBlockTemplateContext *gbp;
+  SubmitContext *submit;  
   unsigned threadIdx;
   OpenCLDeviceContext *device;
   uint64_t totalRoundsNum; 
@@ -135,7 +136,6 @@ void *mine(void *arg)
   const unsigned checkInterval = 8;
   double roundSizeInGb = (uint64_t)checkInterval*realSieveSize*device.groupsNum / 1000000000.0;
   unsigned roundsNum = 0;    
-  SubmitContext submitCtx;  
 
   std::unique_ptr<GPUNonceAndHash[]> nonceAndHash(new GPUNonceAndHash[device.groupsNum]); 
   std::unique_ptr<FermatQueue[]> queue(new FermatQueue[device.groupsNum]);
@@ -185,7 +185,7 @@ void *mine(void *arg)
             fprintf(stderr, "chain found!\n");
             work.nonce = results.resultNonces[i];
             copyMultiplierToBlock(work, primorial, results.resultMultipliers[i]);
-            submitCtx.submitBlock(workTemplate, work, dataId); 
+            ctx->submit->submitBlock(workTemplate, work, dataId); 
           }
         }
       }
@@ -354,21 +354,21 @@ int main(int argc, char **argv)
     for (size_t i = 0; i < ctx.devicesNum; i++) {
       printf(" * GPU %u benchmark start:\n", (unsigned)i+1);
       OpenCLDeviceContext &device = ctx.devices[i];
-//       multiplyBenchmark(device, 256/32, 262144);
-//       multiplyBenchmark(device, 384/32, 262144);  
-//       moduloBenchmark(device, 512/32, 384/32, 262144);
-//       fermatTestBenchmark(device, 256/32, 65536);      
-//       fermatTestBenchmark(device, 384/32, 65536);
-//       
-//       printf("   * sieve with checking results\n");
-//       sieveBenchmark(primeSource, primorial, device, 10.5, true);         
-// 
-//       printf("   * sieve performance test\n");      
-//       sieveBenchmark(primeSource, primorial, device, 10.5, false);      
-//       
+      multiplyBenchmark(device, 256/32, 262144);
+      multiplyBenchmark(device, 384/32, 262144);  
+      moduloBenchmark(device, 512/32, 384/32, 262144);
+      fermatTestBenchmark(device, 256/32, 65536);      
+      fermatTestBenchmark(device, 384/32, 65536);
       
-//       printf("   * mine with checking results\n");      
-//       gpuMinerBenchmark(device, 10.5, 32, true);      
+      printf("   * sieve with checking results\n");
+      sieveBenchmark(primeSource, primorial, device, 10.5, true);         
+
+      printf("   * sieve performance test\n");      
+      sieveBenchmark(primeSource, primorial, device, 10.5, false);      
+      
+      
+      printf("   * mine with checking results\n");      
+      gpuMinerBenchmark(device, 10.5, 32, true);      
       
       printf("   * mine performance test\n");        
       gpuMinerBenchmark(device, 10.5, 32, false);
@@ -377,7 +377,7 @@ int main(int argc, char **argv)
     return 0;
   }
  
-  GetBlockTemplateContext gbp(gUrl, gUserName, gPassword, gWallet, 8, ctx.devicesNum, extraNonce);
+  GetBlockTemplateContext gbp(gUrl, gUserName, gPassword, gWallet, 4, ctx.devicesNum, extraNonce);
   gbp.run();
   
   MineContext *mineCtx = new MineContext[ctx.devicesNum];  
@@ -388,7 +388,8 @@ int main(int argc, char **argv)
     mineCtx[i].device = &ctx.devices[i];
     mineCtx[i].threadIdx = i;
     mineCtx[i].totalRoundsNum = 0;
-    memset(mineCtx[i].foundChains, 0, sizeof(mineCtx->foundChains));    
+    memset(mineCtx[i].foundChains, 0, sizeof(mineCtx->foundChains)); 
+    mineCtx[i].submit = new SubmitContext(gUrl, gUserName, gPassword);    
     pthread_create(&thread, 0, mine, &mineCtx[i]);
   }
   

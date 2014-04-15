@@ -135,6 +135,7 @@ int OpenCLInit(OpenCLPlatrormContext &ctx,
                             sizeof(platformName), platformName, 0) != CL_SUCCESS)
         return logError(1, stderr, "Error: can't enumerate OpenCL platforms\n");
 
+      printf("OpenCL platform available: %s\n", platformName);
       if (strcmp(platformName, targetPlatformName) == 0) {
         targetPlatform = platforms[i];
         break;
