@@ -3,8 +3,8 @@
 
 typedef unsigned long sieve_word_t;
 typedef uint64_t uint64;
-#define ULONG_MAX std::numeric_limits<unsigned long>::max()
-#define UINT_MAX std::numeric_limits<unsigned int>::max()
+#define ULONG_MAX_VALUE std::numeric_limits<unsigned long>::max()
+#define UINT_MAX_VALUE std::numeric_limits<unsigned int>::max()
 
 class CBlockIndex;
 

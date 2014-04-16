@@ -3,6 +3,9 @@
 #include "primecoin.h"
 #include "system.h"
 #include "rippedFromHp.h"
+#include "Debug.h"
+
+#include <ncurses.h>
 
 #include <getopt.h>
 #include <memory>
@@ -263,6 +266,7 @@ struct MineContext {
   uint64_t totalRoundsNum; 
   uint64_t foundChains[20];
   double speed;
+  WINDOW *log;
 };
 
 void *mine(void *arg)
@@ -302,14 +306,6 @@ void *mine(void *arg)
       work.bits = *(uint32_t*)workTemplate->diffbits;
       work.nonce = 0;
       testParams.bits = work.bits;
-      
-      printf(" * [%u] new block %u detected (data: %08X %08X %08X %08X ...)\n",
-             ctx->threadIdx+1,
-             workTemplate->height,
-             workTemplate->_mrklroot[0],
-             workTemplate->_mrklroot[1],
-             workTemplate->_mrklroot[2],
-             workTemplate->_mrklroot[3]);
     }
 
     if (!updateBlock(&work, blockHeaderHash, *ctx->primeSource, testParams))
@@ -328,16 +324,7 @@ void *mine(void *arg)
                                    testParams,
                                    *ctx->primeSource,
                                    ctx->foundChains)) {
-      fprintf(stderr, "block found!\n"); 
-     
-      uint8_t hash1[32];
-      uint8_t hash[32];
-      sha256(hash1, &work, 80);
-      sha256(hash, hash1, 32);
-      for (unsigned i = 0; i < 32; i++)
-        fprintf(stderr, "%02X", (unsigned)hash[i]);
-      fprintf(stderr, "\n");
-    
+      logFormattedWrite(ctx->log, "block found!");
       ctx->submit->submitBlock(workTemplate, work, dataId);
     }
       
@@ -472,7 +459,11 @@ int main(int argc, char **argv)
     return 0;
   }
  
-  GetBlockTemplateContext ctx(gUrl, gUserName, gPassword, gWallet, 4, gThreadsNum, extraNonce);
+  WINDOW *display = initscr();
+  WINDOW *log = newwin(30, 160, 3 + gThreadsNum + 12, 0);
+  scrollok(log, TRUE); 
+ 
+  GetBlockTemplateContext ctx(log, gUrl, gUserName, gPassword, gWallet, 4, gThreadsNum, extraNonce);
   ctx.run();
   
   MineContext *mineCtx = new MineContext[gThreadsNum];
@@ -483,7 +474,8 @@ int main(int argc, char **argv)
     mineCtx[i].threadIdx = i;
     mineCtx[i].totalRoundsNum = 0;
     memset(mineCtx[i].foundChains, 0, sizeof(mineCtx->foundChains));
-    mineCtx[i].submit = new SubmitContext(gUrl, gUserName, gPassword);
+    mineCtx[i].submit = new SubmitContext(log, gUrl, gUserName, gPassword);
+    mineCtx[i].log = log;
     pthread_create(&thread, 0, mine, &mineCtx[i]);
   }
   
@@ -492,6 +484,18 @@ int main(int argc, char **argv)
   double sieveSizeInGb = realSieveSize / 1000000000.0;
   timeMark workBeginPoint = getTimeMark();
 
+  {
+    time_t rawtime;
+    struct tm * timeinfo;          
+    char buffer[80];
+    time (&rawtime);
+    timeinfo = localtime(&rawtime);
+    strftime(buffer,80, "%d-%m-%Y %H:%M:%S", timeinfo);  
+    wmove(display, 0, 0);
+    wprintw(display, " ** xpmcpuminer started %s %s %s worker %i **\n", buffer, gUrl, gWallet, extraNonce);
+  }
+  
+  refresh();
   while (true) {
     sleep(5);    
     uint64_t foundChains[MaxChainLength];
@@ -499,6 +503,8 @@ int main(int argc, char **argv)
     double averageSpeed = 0.0;
     memset(foundChains, 0, sizeof(foundChains));
     
+    wmove(display, 1, 0);
+    wprintw(display, " ** block: %u, difficulty: %.3lf", ctx.getBlockHeight(), ctx.getDifficulty());
     timeMark currentPoint = getTimeMark();    
     uint64_t elapsedTime = usDiff(workBeginPoint, currentPoint);
     for (int i = 0; i < gThreadsNum; i++) {
@@ -509,18 +515,23 @@ int main(int argc, char **argv)
       speed += mineCtx[i].speed;
       averageSpeed += threadAvgSpeed;
       
-      printf("[%u] %.3lfG, average: %.3lfG\n", i+1, mineCtx[i].speed, threadAvgSpeed);
+      wmove(display, i+3, 0);
+      wprintw(display, "[%u] %.3lfG, average: %.3lfG", i+1, mineCtx[i].speed, threadAvgSpeed);
     }
   
-    printf(" * speed: %.3lfG, average: %.3lfG\n", speed, averageSpeed);
-    for (unsigned chIdx = 1; chIdx < MaxChainLength && foundChains[chIdx]; chIdx++) {
-      printf("   * chains/%u: %llu %.3lf/sec ", chIdx, foundChains[chIdx], foundChains[chIdx] / (elapsedTime / 1000000.0));
+    wmove(display, gThreadsNum+3, 0);
+    wprintw(display, " * speed: %.3lfG, average: %.3lfG\n", speed, averageSpeed);
+    unsigned chIdx;
+    for (chIdx = 1; chIdx < MaxChainLength && foundChains[chIdx]; chIdx++) {
+      wmove(display, gThreadsNum+3 + chIdx+1, 0);
+      wprintw(display, "   * chains/%u: %llu %.3lf/sec ",
+              chIdx, foundChains[chIdx], foundChains[chIdx] / (elapsedTime / 1000000.0));
       if (chIdx >= 7)
-        printf("%.3lf/hour ", foundChains[chIdx] / (elapsedTime / 1000000.0) * 3600.0);
-      printf("\n");
+        wprintw(display, "%.3lf/hour ", foundChains[chIdx] / (elapsedTime / 1000000.0) * 3600.0);
     }
-  
-    fflush(stdout);
+    
+    wrefresh(display);
+    wrefresh(log);
   }
   
   return 0;

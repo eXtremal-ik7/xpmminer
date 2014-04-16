@@ -15,3 +15,7 @@ find_library(JANSSON_LIBRARY jansson)
 # CURL
 find_path(CURL_INCLUDE_DIRECTORY curl/curl.h)
 find_library(CURL_LIBRARY curl)
+
+# ncurses
+find_path(NCURSES_INCLUDE_DIRECTORY ncurses.h)
+find_library(NCURSES_LIBRARY ncurses)

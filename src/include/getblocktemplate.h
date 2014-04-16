@@ -12,6 +12,7 @@ extern "C" {
 
 class GetBlockTemplateContext {
 private:
+  void *_log;
   const char *_url;
   const char *_user;
   const char *_password;
@@ -20,9 +21,11 @@ private:
   unsigned _blocksNum;
   uint32_t _extraNonce;
   bool _blockTemplateExists;
-  blktemplate_t *_blockTemplate;
+  
   blktemplate_t **_blocks;
   unsigned _dataId;
+  unsigned _height;
+  double _difficulty;
   
   pthread_mutex_t _mutex;
   std::string _response;
@@ -39,7 +42,8 @@ private:
   void updateWork();
   
 public:
-  GetBlockTemplateContext(const char *url,
+  GetBlockTemplateContext(void *log,
+                          const char *url,
                           const char *user,
                           const char *password,
                           const char *wallet,
@@ -48,10 +52,13 @@ public:
                           unsigned extraNonce);
   void run();
   blktemplate_t *get(unsigned blockIdx, blktemplate_t *old, unsigned *dataId, bool *hasChanged);
+  unsigned getBlockHeight() { return _blockTemplateExists ? _height : 0; }
+  double getDifficulty() { return _blockTemplateExists ? _difficulty : 0.0; }
 };
 
 class SubmitContext { 
 private:
+  void *_log;        
   CURL *curl;
   std::string _response;
   const char *_url;
@@ -65,7 +72,7 @@ private:
   
   
 public:
-  SubmitContext(const char *url, const char *user, const char *password);
+  SubmitContext(void *log, const char *url, const char *user, const char *password);
   void submitBlock(blktemplate_t *blockTemplate,
                    const PrimecoinBlockHeader &header,
                    unsigned dataId);

@@ -37,7 +37,7 @@ uint32_t chainLengthFromBits(uint32_t bits)
 double difficultyFromBits(uint32_t bits)
 {
   return (double)(bits >> DifficultyFractionalBits) +
-         (bits & DifficultyFractionalMask) * (1.0 / 16777216);
+         ((bits & DifficultyFractionalMask) / 16777216.0);
 }
 
 void incrementChainLengthInBits(uint32_t *bits)

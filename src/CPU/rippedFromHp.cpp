@@ -87,7 +87,7 @@ bool CSieveOfEratosthenesHp::Weave()
 #endif
   
     // Check whether fixed multiplier fits in an unsigned long
-    bool fUseLongForFixedMultiplier = mpzFixedMultiplier < ULONG_MAX;
+    bool fUseLongForFixedMultiplier = mpzFixedMultiplier < ULONG_MAX_VALUE;
     unsigned long nFixedMultiplier;
     mpz_class mpzFixedFactor;
     if (fUseLongForFixedMultiplier)
@@ -107,7 +107,7 @@ bool CSieveOfEratosthenesHp::Weave()
         {
             // Combine multiple primes to produce a big divisor
             unsigned int nPrimeCombined = 1;
-            while (nPrimeCombined < UINT_MAX / vPrimes[nCombinedEndSeq])
+            while (nPrimeCombined < UINT_MAX_VALUE / vPrimes[nCombinedEndSeq])
             {
                 nPrimeCombined *= vPrimes[nCombinedEndSeq];
                 nCombinedEndSeq++;
@@ -135,7 +135,7 @@ bool CSieveOfEratosthenesHp::Weave()
         unsigned int nTwoInverse = (nPrime + 1) / 2;
         
         // Check whether 32-bit arithmetic can be used for nFixedInverse
-        const bool fUse32BArithmetic = (UINT_MAX / nTwoInverse) >= nPrime;
+        const bool fUse32BArithmetic = (UINT_MAX_VALUE / nTwoInverse) >= nPrime;
 
         if (fUse32BArithmetic)
         {

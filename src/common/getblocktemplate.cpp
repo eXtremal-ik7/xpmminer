@@ -1,7 +1,9 @@
 #include "getblocktemplate.h"
 #include "primecoin.h"
+#include "Debug.h"
 
 #include <unistd.h>
+#include <memory>
 #include <string>
 
 class MutexLocker {
@@ -52,19 +54,21 @@ const char *set_b58addr(const char *arg, _cbscript_t *p)
 void GetBlockTemplateContext::updateWork()
 {
   MutexLocker locker(&_mutex);
-  
   _blockTemplateExists = false;
+  
   const char *error;  
   json_error_t jsonError;
   json_t *response = json_loads(_response.c_str(), 0, &jsonError);
   if (!response) {
-    fprintf(stderr, " * Error: getblocktemplate response JSON parsing error\n");
-    fprintf(stderr, "%s\n", _response.c_str());
+    logFormattedWrite(_log,
+                      "getblocktemplate response JSON parsing error: %s",
+                      _response.c_str());   
     return;
   }
   
-  if (_blockTemplate)
-    blktmpl_free(_blockTemplate);
+  std::unique_ptr<blktemplate_t, std::function<void(blktemplate_t*)>> block(
+    blktmpl_create(), [](blktemplate_t *b) { blktmpl_free(b); });
+  
   for (unsigned i = 0; i < _blocksNum; i++) {
     if (_blocks[i]) {
       blktmpl_free(_blocks[i]);
@@ -72,12 +76,10 @@ void GetBlockTemplateContext::updateWork()
     }
   }
   
-  _blockTemplate = blktmpl_create();
-  
-  error = blktmpl_add_jansson(_blockTemplate, response, time(0));
+  error = blktmpl_add_jansson(block.get(), response, time(0));
   json_delete(response);
   if (error) {
-    fprintf(stderr, " * Error: %s\n", error);
+    logFormattedWrite(_log, "Error %s", error);
     return;
   }
 
@@ -88,11 +90,11 @@ void GetBlockTemplateContext::updateWork()
    
     error = set_b58addr(_wallet, &opt_coinbase_script);
     if (error) {
-      fprintf(stderr, " * Error: %s\n", error);
+      logFormattedWrite(_log, "Error %s", error);
       return;
     }
     
-    _blocks[i] = blktmpl_duplicate(_blockTemplate);
+    _blocks[i] = blktmpl_duplicate(block.get());
     uint64_t num = 
       blkmk_init_generation2(_blocks[i],
                              opt_coinbase_script.data,
@@ -102,17 +104,21 @@ void GetBlockTemplateContext::updateWork()
     uint32_t extraNonce = (_extraNonce << 16) + i;
     ssize_t coinbaseAppendResult = blkmk_append_coinbase_safe(_blocks[i], &extraNonce, sizeof(extraNonce));
     if (coinbaseAppendResult < 0) {
-      fprintf(stderr, " * Error: cannot add extra nonce (error %i)\n", (int)coinbaseAppendResult);
+      logFormattedWrite(_log, "cannot add extra nonce (error %i)", (int)coinbaseAppendResult);
       return; 
     }
       
     size_t dataSize = blkmk_get_data(_blocks[i], data, sizeof(data), time(0), NULL, &_dataId);
     if (!(dataSize >= 76 && dataSize <= sizeof(data))) {
-      fprintf(stderr, " * Error: getblocktemplate response decoding error (invalid size)\n");
+      logFormattedWrite(_log, "getblocktemplate response decoding error (invalid size)");
       return;
     }      
   }
- 
+   
+   if (_height != block->height)
+     logFormattedWrite(_log, "new block detected: %u", block->height);
+  _height = block->height;
+  _difficulty = difficultyFromBits(*(uint32_t*)(&block->diffbits));
   _blockTemplateExists = true;
 }
 
@@ -145,28 +151,29 @@ void GetBlockTemplateContext::queryWork()
   while (1) {
     _response.clear();
     if (curl_easy_perform(curl) != CURLE_OK) {
-      fprintf(stderr, "curl_easy_perform ERROR\n");
+      logFormattedWrite(_log, "block receiving error!");
     } else {
       updateWork();
     }
-    sleep(1);
+    sleep(_timeout);
   }
 }
 
-GetBlockTemplateContext::GetBlockTemplateContext(const char *url,
+GetBlockTemplateContext::GetBlockTemplateContext(void *log,
+                                                 const char *url,
                                                  const char *user,
                                                  const char *password,
                                                  const char *wallet,
                                                  unsigned timeout,
                                                  unsigned blocksNum,
                                                  unsigned extraNonce) :
+  _log(log),                                               
   _url(url), _user(user), _password(password), _wallet(wallet),
   _timeout(timeout), _blocksNum(blocksNum), _extraNonce(extraNonce),
-  _blockTemplateExists(false), _blockTemplate(0)
+  _blockTemplateExists(false)
 {
   pthread_mutex_init(&_mutex, 0);
   _blocks = (blktemplate_t**)calloc(sizeof(blktemplate_t*), blocksNum);
-  printf("workerId=%u\n", extraNonce);
 }
 
 void GetBlockTemplateContext::run()
@@ -190,7 +197,6 @@ blktemplate_t *GetBlockTemplateContext::get(unsigned blockIdx, blktemplate_t *ol
   }
 }
 
-
 size_t SubmitContext::curlWriteCallback(void *ptr,
                                         size_t size,
                                         size_t nmemb,
@@ -201,8 +207,8 @@ size_t SubmitContext::curlWriteCallback(void *ptr,
 }
 
 
-SubmitContext::SubmitContext(const char *url, const char *user, const char *password) :
-  _url(url), _user(user), _password(password)
+SubmitContext::SubmitContext(void *log, const char *url, const char *user, const char *password) :
+  _log(log), _url(url), _user(user), _password(password)
 {
   curl_slist *header = curl_slist_append(0, "User-Agent: xpmminer");
   curl_slist_append(header, "Content-Type: application/json");
@@ -233,12 +239,12 @@ void SubmitContext::submitBlock(blktemplate_t *blockTemplate,
   json_delete(jsonBlock);
   
   _response.clear();
-  fprintf(stderr, "submit request: %s\n", request);
+  logFormattedWrite(_log, "submit request: %s", request);
   curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request);
   if (curl_easy_perform(curl) != CURLE_OK) {
-    fprintf(stderr, "curl_easy_perform ERROR\n");
+    logFormattedWrite(_log, "block send error!!!");
   } else {
-    fprintf(stderr, "%s\n", _response.c_str());
+    logFormattedWrite(_log, "response: %s");
   }
   
   free(request);

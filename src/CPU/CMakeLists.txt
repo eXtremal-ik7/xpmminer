@@ -19,6 +19,7 @@ target_link_libraries(xpmcpuminer
   ${CRYPTO_LIBRARY}
   ${CURL_LIBRARY}
   ${JANSSON_LIBRARY}
+  ${NCURSES_LIBRARY}
 )
 
 if (OS_LINUX)
