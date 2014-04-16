@@ -355,10 +355,13 @@ int main(int argc, char **argv)
       printf(" * GPU %u benchmark start:\n", (unsigned)i+1);
       OpenCLDeviceContext &device = ctx.devices[i];
       multiplyBenchmark(device, 256/32, 262144);
-      multiplyBenchmark(device, 384/32, 262144);  
+      multiplyBenchmark(device, 384/32, 262144);
+      multiplyBenchmark(device, 448/32, 262144);
       moduloBenchmark(device, 512/32, 384/32, 262144);
+      moduloBenchmark(device, 640/32, 512/32, 262144);      
       fermatTestBenchmark(device, 256/32, 65536);      
       fermatTestBenchmark(device, 384/32, 65536);
+      fermatTestBenchmark(device, 448/32, 65536);      
       
       printf("   * sieve with checking results\n");
       sieveBenchmark(primeSource, primorial, device, 10.5, true);         

@@ -12,12 +12,14 @@ enum OpenCLKernels {
   CLKernelMultiplyBenchmark128,
   CLKernelMultiplyBenchmark256,
   CLKernelMultiplyBenchmark384,
+  CLKernelMultiplyBenchmark448,
   CLKernelMultiplyBenchmark512,
   CLKernelModulo384to256test,
   CLKernelModulo512to384test,
-  CLKernelModule640to512test,
+  CLKernelModulo640to512test,
   CLKernelFermatTestBenchmark256,
   CLKernelFermatTestBenchmark384,
+  CLKernelFermatTestBenchmark448,
   CLKernelsNum
 }; 
 

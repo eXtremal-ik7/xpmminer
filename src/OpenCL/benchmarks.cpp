@@ -473,7 +473,9 @@ void multiplyBenchmark(OpenCLDeviceContext &device,
     kernel = device.kernels[CLKernelMultiplyBenchmark256];
   } else if (mulOperandSize == 384/32) {
     kernel = device.kernels[CLKernelMultiplyBenchmark384];
-  } else if (mulOperandSize == 512/32) {
+  } else if (mulOperandSize == 448/32) {
+    kernel = device.kernels[CLKernelMultiplyBenchmark448];
+  }  else if (mulOperandSize == 512/32) {
     kernel = device.kernels[CLKernelMultiplyBenchmark512];  
   } else {
     fprintf(stderr, "Can't multiply %u-size operands on OpenCL device\n", mulOperandSize*32);
@@ -622,8 +624,8 @@ void moduloBenchmark(OpenCLDeviceContext &device,
     kernel = device.kernels[CLKernelModulo384to256test];
   } else if (dividendOperandSize == 512/32 && divisorOperandSize == 384/32) {
     kernel = device.kernels[CLKernelModulo512to384test];
-  } else if (dividendOperandSize = 640/32 && divisorOperandSize == 512/32) {
-    kernel = device.kernels[CLKernelModule640to512test];
+  } else if (dividendOperandSize == 640/32 && divisorOperandSize == 512/32) {
+    kernel = device.kernels[CLKernelModulo640to512test];
   } else {
     fprintf(stderr, "Can't divide %ubits to %ubits in OpenCL (no such implementation)\n",
             dividendOperandSize*32,
@@ -742,6 +744,8 @@ void fermatTestBenchmark(OpenCLDeviceContext &device,
     kernel = device.kernels[CLKernelFermatTestBenchmark256];
   } else if (operandSize == 384/32) {
     kernel = device.kernels[CLKernelFermatTestBenchmark384];
+  } else if (operandSize == 448/32) {
+    kernel = device.kernels[CLKernelFermatTestBenchmark448];
   } else {
     fprintf(stderr, "Can't do Fermat test on %ubit operand\n", operandSize*32);
     return;

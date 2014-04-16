@@ -13,12 +13,14 @@ static const char *gOpenCLKernelNames[] = {
   "multiplyBenchmark128",
   "multiplyBenchmark256",
   "multiplyBenchmark384",
+  "multiplyBenchmark448",  
   "multiplyBenchmark512",  
   "modulo384to256test",
   "modulo512to384test",
   "modulo640to512test",
   "fermatTestBenchMark256",
-  "fermatTestBenchMark384"  
+  "fermatTestBenchMark384",
+  "fermatTestBenchMark448"
 };
 
 uint32_t rand32()
