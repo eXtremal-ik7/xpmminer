@@ -122,6 +122,9 @@ void sieveBenchmark(PrimeSource &primeSource,
   clSetKernelArg(kernel, 1, sizeof(device.cunningham1), &device.cunningham1);
   clSetKernelArg(kernel, 2, sizeof(device.cunningham2), &device.cunningham2);
   clSetKernelArg(kernel, 3, sizeof(device.bitwin), &device.bitwin);
+  clSetKernelArg(kernel, 4, sizeof(device.primesDevPtr), &device.primesDevPtr);
+  clSetKernelArg(kernel, 5, sizeof(device.multipliers64DevPtr), &device.multipliers64DevPtr);
+  clSetKernelArg(kernel, 6, sizeof(device.offsets64DevPtr), &device.offsets64DevPtr);    
   
   size_t sieveBufferSize = GPUMaxSieveSize * (gExtensionsNum+1) / 8;
   std::unique_ptr<uint8_t[]> cunningham1Bytefield(new uint8_t[sieveBufferSize]);
@@ -167,7 +170,7 @@ void sieveBenchmark(PrimeSource &primeSource,
         cl_int result;
         
         cl_kernel kernel = device.kernels[CLKernelSieveBenchmark];      
-        clSetKernelArg(kernel, 4, sizeof(roundsNum), &roundsNum);
+        clSetKernelArg(kernel, 7, sizeof(roundsNum), &roundsNum);
         if ((result = clEnqueueNDRangeKernel(device.queue, kernel, 1, 0,
                                              globalThreads, localThreads, 0, 0, &event)) != CL_SUCCESS) {
           fprintf(stderr, "clEnqueueNDRangeKernel error!\n");

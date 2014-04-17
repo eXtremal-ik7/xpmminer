@@ -1,5 +1,4 @@
 #include "sha256.h"
-#include "constants.h"
 #pragma OPENCL EXTENSION cl_amd_printf : enable
 
 typedef unsigned char uint8_t;
@@ -252,6 +251,9 @@ void weave(uint4 M0, uint4 M1, uint4 M2,
            __global uint32_t *bitwinBitfield,
            __local uint8_t *localCunningham1,
            __local uint8_t *localCunningham2,
+           __constant uint32_t *primes,
+           __global uint64_t *multipliers64,
+           __global uint32_t *offsets64,
            unsigned roundsNum)
 {
   const unsigned primesPerThread = WeaveDepth / GroupSize;  
@@ -261,7 +263,7 @@ void weave(uint4 M0, uint4 M1, uint4 M2,
   unsigned sieveWords = sieveBytes / 4;
 
   uint32_t inverseModulos[256]; // <--- large buffer for global memory placing
-  uint32_t inverseModulosCurrent[primesPerThread];          
+  uint32_t inverseModulosCurrent[WeaveDepth / GroupSize];          
   
   // Set all bits of output buffers to 1
   clFillMemoryByGroup(cunningham1Bitfield, sieveBytes);
@@ -396,6 +398,9 @@ __kernel void sieveBenchmark(__global uint32_t *fixedMultipliers,
                              __global uint32_t *cunningham1Bitfield,
                              __global uint32_t *cunningham2Bitfield,
                              __global uint32_t *bitwinBitfield,
+                             __constant uint32_t *primes,
+                             __global uint64_t *multipliers64,
+                             __global uint32_t *offsets64,                             
                              unsigned roundsNum)
 {
   __local uint8_t localCunningham1[L1CacheSize];
@@ -408,6 +413,9 @@ __kernel void sieveBenchmark(__global uint32_t *fixedMultipliers,
         bitwinBitfield + get_group_id(0) * MaxSieveBufferSize/32,
         localCunningham1,
         localCunningham2,
+        primes,
+        multipliers64,
+        offsets64,
         roundsNum);
         
   return;
@@ -2962,7 +2970,10 @@ struct GPUNonceAndHash {
 #pragma pack(pop, 1)
 
 __kernel void searchNonce(__constant uint4 *block,
-                          __global struct GPUNonceAndHash *nonceAndHash)
+                          __global struct GPUNonceAndHash *nonceAndHash,
+                          __constant uint32_t *primes,
+                          __global uint64_t *multipliers64,
+                          __global uint32_t *offsets64)
 {
   __local uint4 hash[2*GroupSize];
   __local uint8_t hasModulo[GroupSize];
@@ -3093,7 +3104,10 @@ __kernel void sieve(__global uint32_t *cunningham1Bitfield,
                     __global uint32_t *cunningham2Bitfield,
                     __global uint32_t *bitwinBitfield,
                     __constant uint4 *primorial,
-                    __global struct GPUNonceAndHash *nonceAndHash)
+                    __global struct GPUNonceAndHash *nonceAndHash,
+                    __constant uint32_t *primes,
+                    __global uint64_t *multipliers64,
+                    __global uint32_t *offsets64)
 {
   __local uint8_t localCunningham1[L1CacheSize];
   __local uint8_t localCunningham2[L1CacheSize];  
@@ -3111,6 +3125,9 @@ __kernel void sieve(__global uint32_t *cunningham1Bitfield,
         bitwinBitfield + get_group_id(0) * MaxSieveBufferSize/32,
         localCunningham1,
         localCunningham2,
+        primes,
+        multipliers64,
+        offsets64,
         FixedRoundsNum);
 }
 
