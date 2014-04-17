@@ -168,69 +168,68 @@ int OpenCLInit(OpenCLPlatrormContext &ctx,
                      devices.get(), 0) != CL_SUCCESS)
     return logError(1, stderr, "Error: can't query '%s' devices\n", targetPlatformName);
   
+  // context creation
+  cl_context_properties contextProperties[] = {
+    CL_CONTEXT_PLATFORM, (cl_context_properties)targetPlatform, 0
+  };      
+  
+  cl_context context = clCreateContext(contextProperties, ctx.devicesNum, devices.get(), 0, 0, &clResult);
+  if (clResult != CL_SUCCESS || !context)
+    return logError(1, stderr, " * Error: can't create OpenCL context for this device");  
+  
+  cl_program program = clCreateProgramWithSource(context, 1, &kernelSource, 0, &clResult);
+  if (clResult != CL_SUCCESS || program == 0)
+    return logError(1, stderr, "Error: can't compile OpenCL kernel %s\n", kernelFile);
+  
+  if (clBuildProgram(program, ctx.devicesNum, devices.get(), cmdLine.c_str(), 0, 0) != CL_SUCCESS) {    
+    size_t logSize;
+    clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG, 0, 0, &logSize);
+    
+    std::unique_ptr<char[]> log(new char[logSize]);
+    clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG, logSize, log.get(), 0);
+    fprintf(stderr, "%s\n", log.get());
+    
+    return logError(1, stderr, "Error: can't compile OpenCL kernel %s", kernelFile);
+  }  
+  
   ctx.devices.reset(new OpenCLDeviceContext[ctx.devicesNum]);
   for (cl_uint i = 0; i < ctx.devicesNum; i++) {
-    OpenCLDeviceContext &deviceCtx = ctx.devices[i];
-    deviceCtx.device = devices[i];
+    OpenCLDeviceContext &deviceCtx = ctx.devices[i];    
+
+    deviceCtx.context = context;
     
     // detect device name and number of compute units
     char deviceName[128] = {0};
     char boardName[128] = {0};
     cl_uint computeUnits;
-    clGetDeviceInfo(deviceCtx.device, CL_DEVICE_NAME, sizeof(deviceName), deviceName, 0);
-    clGetDeviceInfo(deviceCtx.device, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(computeUnits), &computeUnits, 0);
+
+    clGetDeviceInfo(devices[i], CL_DEVICE_NAME, sizeof(deviceName), deviceName, 0);
+    clGetDeviceInfo(devices[i], CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(computeUnits), &computeUnits, 0);
     fprintf(stderr, "[%u] %s; %u compute units\n", (unsigned)i, deviceName, computeUnits);
     
     deviceCtx.groupSize = 256;
-    deviceCtx.groupsNum = computeUnits*4;
+    deviceCtx.groupsNum = computeUnits*4;    
     
-    // context creation
-    cl_context_properties contextProperties[] = {
-      CL_CONTEXT_PLATFORM, (cl_context_properties)targetPlatform, 0
-    };      
-    
-    deviceCtx.context =
-    clCreateContext(contextProperties, 1, &deviceCtx.device, 0, 0, &clResult);
-    if (clResult != CL_SUCCESS || !deviceCtx.context)
-      return logError(1, stderr, " * Error: can't create OpenCL context for this device");
-    
-    deviceCtx.queue =
-      clCreateCommandQueue(deviceCtx.context, deviceCtx.device, 0, &clResult);
+    deviceCtx.queue = clCreateCommandQueue(context, devices[i], 0, &clResult);
     if (clResult != CL_SUCCESS || !deviceCtx.queue)
       return logError(1, stderr, " * Error: can't create command queue for this device\n");
-
+    
 #ifdef DEBUG_MINING_AMD_OPENCL    
     if (GPA_OpenContext(deviceCtx.queue) != GPA_STATUS_OK ||
         GPA_EnableAllCounters() != GPA_STATUS_OK)
       return logError(1, stderr, "Error: GPA_OpenContext/GPA_EnableAllCounters failed\n");    
 #endif
     
-    deviceCtx.program = clCreateProgramWithSource(deviceCtx.context, 1, &kernelSource, 0, &clResult);
-    if (clResult != CL_SUCCESS || deviceCtx.program == 0)
-      return logError(1, stderr, "Error: can't compile OpenCL kernel %s\n", kernelFile);
-
-    if (clBuildProgram(deviceCtx.program, 1, &deviceCtx.device, cmdLine.c_str(), 0, 0) != CL_SUCCESS) {    
-      size_t logSize;
-      clGetProgramBuildInfo(deviceCtx.program, deviceCtx.device, CL_PROGRAM_BUILD_LOG, 0, 0, &logSize);
-      
-      std::unique_ptr<char[]> log(new char[logSize]);
-      clGetProgramBuildInfo(deviceCtx.program, deviceCtx.device, CL_PROGRAM_BUILD_LOG, logSize, log.get(), 0);
-      fprintf(stderr, "%s\n", log.get());
-      
-      return logError(1, stderr, "Error: can't compile OpenCL kernel %s", kernelFile);
-    }
-    
-    // retrieving handles of all used funtions
     deviceCtx.kernels.reset(new cl_kernel[CLKernelsNum]);
     for (size_t i = 0; i < CLKernelsNum; i++) {
-      deviceCtx.kernels[i] = clCreateKernel(deviceCtx.program, gOpenCLKernelNames[i], &clResult);
+      deviceCtx.kernels[i] = clCreateKernel(program, gOpenCLKernelNames[i], &clResult);
       if (clResult != CL_SUCCESS)
         return logError(1, stderr, "Error: can't find function %s in kernel %s\n",
                         gOpenCLKernelNames[i],
                         kernelFile);
     }
   }
-
+  
   return 0;
 }
 

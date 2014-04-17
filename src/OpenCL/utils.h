@@ -71,7 +71,6 @@ struct FermatTestResults {
 
 struct OpenCLDeviceContext {
   cl_context context;
-  cl_program program;  
   cl_device_id device;
   cl_command_queue queue;
   std::unique_ptr<cl_kernel[]> kernels;
