@@ -20,6 +20,7 @@ enum OpenCLKernels {
   CLKernelFermatTestBenchmark256,
   CLKernelFermatTestBenchmark384,
   CLKernelFermatTestBenchmark448,
+  CLKernelEmpty,
   CLKernelsNum
 }; 
 
@@ -97,6 +98,7 @@ struct OpenCLDeviceContext {
 
 struct OpenCLPlatrormContext {
   cl_uint devicesNum;
+  cl_program program;
   std::unique_ptr<OpenCLDeviceContext[]> devices;
 };
 
@@ -171,8 +173,9 @@ int OpenCLInit(OpenCLPlatrormContext &ctx,
                bool useCPU,
                bool disableOpt);
 
-int OpenCLKernelsPrepare(OpenCLPlatrormContext &ctx,
-                         PrimeSource &primeSource,                         
+int OpenCLKernelsPrepare(OpenCLPlatrormContext &platform,
+                         OpenCLDeviceContext &device,
+                         PrimeSource &primeSource,
                          mpz_class &primorial,
                          unsigned maxSieveSize,
                          unsigned weaveDepth,

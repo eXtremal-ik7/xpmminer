@@ -3536,3 +3536,7 @@ __kernel void FermatTestEnqueueBt(__global struct GPUNonceAndHash *nonceAndHash,
   
   groupResults->size = outputSize;
 }
+
+__kernel void empty()
+{
+}

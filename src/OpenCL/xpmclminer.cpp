@@ -99,6 +99,7 @@ struct MineContext {
   GetBlockTemplateContext *gbp;
   SubmitContext *submit;  
   unsigned threadIdx;
+  OpenCLPlatrormContext *platform;
   OpenCLDeviceContext *device;
   uint64_t totalRoundsNum; 
   uint64_t foundChains[20];
@@ -126,12 +127,16 @@ void *mine(void *arg)
   MineContext *ctx = (MineContext*)arg;
   OpenCLDeviceContext &device = *ctx->device;
   
+  mpz_class primorial;
+  PrimorialFast(gPrimorial, primorial, primeSource);  
+  if (int error = OpenCLKernelsPrepare(*ctx->platform, device, primeSource, primorial, GPUMaxSieveSize,
+                                       gWeaveDepth+256, MaxChainLength, gExtensionsNum))
+    exit(error);
+  
   blktemplate_t *workTemplate = 0;
   PrimecoinBlockHeader work;
   unsigned dataId;
   mpz_class blockHeaderHash;
-  mpz_class primorial;
-  PrimorialFast(gPrimorial, primorial, primeSource);
 
   unsigned realSieveSize = gSieveSize + gSieveSize/2*gExtensionsNum;    
   const unsigned checkInterval = 8;
@@ -339,14 +344,15 @@ int main(int argc, char **argv)
   
   mpz_class primorial;
   PrimorialFast(gPrimorial, primorial, primeSource);
-  if (int error = OpenCLKernelsPrepare(ctx, primeSource, primorial, GPUMaxSieveSize,
-                                       gWeaveDepth+256, MaxChainLength, gExtensionsNum))
-    return error;
   
   if (isBenchmark) {
     for (size_t i = 0; i < ctx.devicesNum; i++) {
       printf(" * GPU %u benchmark start:\n", (unsigned)i+1);
-      OpenCLDeviceContext &device = ctx.devices[i];
+      OpenCLDeviceContext &device = ctx.devices[i];          
+      if (int error = OpenCLKernelsPrepare(ctx, device, primeSource, primorial, GPUMaxSieveSize,
+                                           gWeaveDepth+256, MaxChainLength, gExtensionsNum))
+        return error;      
+
       multiplyBenchmark(device, 256/32, 262144);
       multiplyBenchmark(device, 384/32, 262144);
       multiplyBenchmark(device, 448/32, 262144);
@@ -385,6 +391,7 @@ int main(int argc, char **argv)
     pthread_t thread;    
     mineCtx[i].primeSource = &primeSource;
     mineCtx[i].gbp = &gbp;
+    mineCtx[i].platform = &ctx;
     mineCtx[i].device = &ctx.devices[i];
     mineCtx[i].threadIdx = i;
     mineCtx[i].totalRoundsNum = 0;
@@ -409,6 +416,7 @@ int main(int argc, char **argv)
     wprintw(display, " ** xpmclminer started %s %s %s worker %i **\n", buffer, gUrl, gWallet, extraNonce);
   }  
   
+  unsigned counter = 0;
   while (true) {
     sleep(5);    
     uint64_t foundChains[MaxChainLength];
@@ -445,6 +453,21 @@ int main(int argc, char **argv)
     
     wrefresh(display);
     wrefresh(log);
+
+    // Workaround about AMD Catalyst bug (prevents performance dropping on
+    // Multi-GPU configurations
+    if ((counter++ % 16) == 0) {
+      for (size_t i = 0; i < ctx.devicesNum; i++) {
+        cl_event event;
+        OpenCLDeviceContext &device = ctx.devices[i];          
+        size_t globalThreads[1] = { device.groupsNum*device.groupSize};
+        size_t localThreads[1] = { device.groupSize };        
+        if ((clEnqueueNDRangeKernel(device.queue, device.kernels[CLKernelEmpty],
+                                    1, 0, globalThreads, localThreads, 0, 0, &event)) == CL_SUCCESS) {
+          clReleaseEvent(event);
+        }
+      }
+    }
   }
   
   return 0;

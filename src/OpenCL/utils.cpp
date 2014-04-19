@@ -20,7 +20,8 @@ static const char *gOpenCLKernelNames[] = {
   "modulo640to512test",
   "fermatTestBenchMark256",
   "fermatTestBenchMark384",
-  "fermatTestBenchMark448"
+  "fermatTestBenchMark448",
+  "empty"
 };
 
 uint32_t rand32()
@@ -175,16 +176,16 @@ int OpenCLInit(OpenCLPlatrormContext &ctx,
   if (clResult != CL_SUCCESS || !context)
     return logError(1, stderr, " * Error: can't create OpenCL context for this device");  
   
-  cl_program program = clCreateProgramWithSource(context, 1, &kernelSource, 0, &clResult);
-  if (clResult != CL_SUCCESS || program == 0)
+  ctx.program = clCreateProgramWithSource(context, 1, &kernelSource, 0, &clResult);
+  if (clResult != CL_SUCCESS || ctx.program == 0)
     return logError(1, stderr, "Error: can't compile OpenCL kernel %s\n", kernelFile);
   
-  if (clBuildProgram(program, ctx.devicesNum, devices.get(), cmdLine.c_str(), 0, 0) != CL_SUCCESS) {    
+  if (clBuildProgram(ctx.program, ctx.devicesNum, devices.get(), cmdLine.c_str(), 0, 0) != CL_SUCCESS) {    
     size_t logSize;
-    clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG, 0, 0, &logSize);
+    clGetProgramBuildInfo(ctx.program, devices[0], CL_PROGRAM_BUILD_LOG, 0, 0, &logSize);
     
     std::unique_ptr<char[]> log(new char[logSize]);
-    clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG, logSize, log.get(), 0);
+    clGetProgramBuildInfo(ctx.program, devices[0], CL_PROGRAM_BUILD_LOG, logSize, log.get(), 0);
     fprintf(stderr, "%s\n", log.get());
     
     return logError(1, stderr, "Error: can't compile OpenCL kernel %s", kernelFile);
@@ -217,21 +218,13 @@ int OpenCLInit(OpenCLPlatrormContext &ctx,
         GPA_EnableAllCounters() != GPA_STATUS_OK)
       return logError(1, stderr, "Error: GPA_OpenContext/GPA_EnableAllCounters failed\n");    
 #endif
-    
-    deviceCtx.kernels.reset(new cl_kernel[CLKernelsNum]);
-    for (size_t i = 0; i < CLKernelsNum; i++) {
-      deviceCtx.kernels[i] = clCreateKernel(program, gOpenCLKernelNames[i], &clResult);
-      if (clResult != CL_SUCCESS)
-        return logError(1, stderr, "Error: can't find function %s in kernel %s\n",
-                        gOpenCLKernelNames[i],
-                        kernelFile);
-    }
   }
   
   return 0;
 }
 
-int OpenCLKernelsPrepare(OpenCLPlatrormContext &ctx,
+int OpenCLKernelsPrepare(OpenCLPlatrormContext &platform,
+                         OpenCLDeviceContext &device,
                          PrimeSource &primeSource,
                          mpz_class &primorial,
                          unsigned maxSieveSize,
@@ -239,6 +232,7 @@ int OpenCLKernelsPrepare(OpenCLPlatrormContext &ctx,
                          unsigned maxChainLength,
                          unsigned extensionsNum)
 {
+  cl_int clResult;
   uint32_t primorialBuffer[8];  
   {
     size_t limbsNumber;    
@@ -246,8 +240,14 @@ int OpenCLKernelsPrepare(OpenCLPlatrormContext &ctx,
     mpz_export(primorialBuffer, &limbsNumber, -1, 4, 0, 0, primorial.get_mpz_t());    
   }
   
-  for (cl_uint i = 0; i < ctx.devicesNum; i++) {
-    OpenCLDeviceContext &device = ctx.devices[i];
+  device.kernels.reset(new cl_kernel[CLKernelsNum]);
+  for (size_t i = 0; i < CLKernelsNum; i++) {
+    device.kernels[i] = clCreateKernel(platform.program, gOpenCLKernelNames[i], &clResult);
+    if (clResult != CL_SUCCESS)
+      return logError(1, stderr, "Error: can't find function %s in kernel\n",
+                      gOpenCLKernelNames[i]);
+  }  
+
     size_t sieveBufferSize = maxSieveSize * (extensionsNum+1) / 8;
     if (clUpload<uint32_t>(device, primeSource.primesPtr(), weaveDepth, &device.primesDevPtr, CL_MEM_READ_ONLY) ||
         clUpload<uint64_t>(device, primeSource.multiplier64Ptr(), weaveDepth, &device.multipliers64DevPtr, CL_MEM_READ_ONLY) ||
@@ -298,7 +298,7 @@ int OpenCLKernelsPrepare(OpenCLPlatrormContext &ctx,
     clSetKernelArg(device.kernels[CLFermatTestEnqueueBt], 6, sizeof(device.c2QueueDevPtr), &device.c2QueueDevPtr);
     clSetKernelArg(device.kernels[CLFermatTestEnqueueBt], 7, sizeof(device.btQueueDevPtr), &device.btQueueDevPtr);    
     clSetKernelArg(device.kernels[CLFermatTestEnqueueBt], 8, sizeof(device.resultsDevPtr), &device.resultsDevPtr);    
-  }
+  
   
   return 0;
 }
