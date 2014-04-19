@@ -78,6 +78,10 @@ struct OpenCLDeviceContext {
   unsigned groupSize;
   unsigned groupsNum;
   
+  cl_mem primesDevPtr;
+  cl_mem multipliers64DevPtr;
+  cl_mem offsets64DevPtr;
+  
   // bitfields, results of weaving
   cl_mem cunningham1;
   cl_mem cunningham2;
@@ -168,9 +172,10 @@ int OpenCLInit(OpenCLPlatrormContext &ctx,
                bool disableOpt);
 
 int OpenCLKernelsPrepare(OpenCLPlatrormContext &ctx,
+                         PrimeSource &primeSource,                         
                          mpz_class &primorial,
                          unsigned maxSieveSize,
-                         unsigned maxWeaveDepth,
+                         unsigned weaveDepth,
                          unsigned maxChainLength,
                          unsigned extensionsNum);
 
@@ -183,5 +188,3 @@ bool OpenCLNewBlockPrepare(OpenCLDeviceContext &device,
 bool OpenCLMiningRound(OpenCLDeviceContext &device,
                        unsigned groupsNum,
                        FermatTestResults *results);
-
-int makeConstantsHeader(const char *fileName, unsigned weaveDepth);

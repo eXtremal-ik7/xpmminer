@@ -114,8 +114,6 @@ int OpenCLInit(OpenCLPlatrormContext &ctx,
     cmdLine.append("-save-temps");
       
   const char *kernelFile = buildPath(PtData, "kernel.cl");
-  const char *constantsFile = buildPath(PtData, "constants.h");
-  makeConstantsHeader(constantsFile, weaveDepth+256);        
         
   // OpenCL preparing
   cl_int clResult;  
@@ -234,9 +232,10 @@ int OpenCLInit(OpenCLPlatrormContext &ctx,
 }
 
 int OpenCLKernelsPrepare(OpenCLPlatrormContext &ctx,
+                         PrimeSource &primeSource,
                          mpz_class &primorial,
                          unsigned maxSieveSize,
-                         unsigned maxWeaveDepth,
+                         unsigned weaveDepth,
                          unsigned maxChainLength,
                          unsigned extensionsNum)
 {
@@ -250,8 +249,10 @@ int OpenCLKernelsPrepare(OpenCLPlatrormContext &ctx,
   for (cl_uint i = 0; i < ctx.devicesNum; i++) {
     OpenCLDeviceContext &device = ctx.devices[i];
     size_t sieveBufferSize = maxSieveSize * (extensionsNum+1) / 8;
-    size_t multipliersBufferSize = maxWeaveDepth*(maxChainLength+extensionsNum);
-    if (clAlloc<uint8_t>(device, device.groupsNum*sieveBufferSize, &device.cunningham1, CL_MEM_READ_WRITE) != 0 ||
+    if (clUpload<uint32_t>(device, primeSource.primesPtr(), weaveDepth, &device.primesDevPtr, CL_MEM_READ_ONLY) ||
+        clUpload<uint64_t>(device, primeSource.multiplier64Ptr(), weaveDepth, &device.multipliers64DevPtr, CL_MEM_READ_ONLY) ||
+        clUpload<uint32_t>(device, primeSource.offsets64Ptr(), weaveDepth, &device.offsets64DevPtr, CL_MEM_READ_ONLY) ||
+        clAlloc<uint8_t>(device, device.groupsNum*sieveBufferSize, &device.cunningham1, CL_MEM_READ_WRITE) != 0 ||
         clAlloc<uint8_t>(device, device.groupsNum*sieveBufferSize, &device.cunningham2, CL_MEM_READ_WRITE) != 0 ||
         clAlloc<uint8_t>(device, device.groupsNum*sieveBufferSize, &device.bitwin, CL_MEM_READ_WRITE) != 0 ||
         clAlloc<PrimecoinBlockHeader>(device, 1, &device.blockHeaderDevPtr, CL_MEM_READ_ONLY) != 0 ||
@@ -265,12 +266,18 @@ int OpenCLKernelsPrepare(OpenCLPlatrormContext &ctx,
     
     clSetKernelArg(device.kernels[CLKernelSearchNonce], 0, sizeof(device.blockHeaderDevPtr), &device.blockHeaderDevPtr);
     clSetKernelArg(device.kernels[CLKernelSearchNonce], 1, sizeof(device.nonceAndHashDevPtr), &device.nonceAndHashDevPtr);
+    clSetKernelArg(device.kernels[CLKernelSearchNonce], 2, sizeof(device.primesDevPtr), &device.primesDevPtr);
+    clSetKernelArg(device.kernels[CLKernelSearchNonce], 3, sizeof(device.multipliers64DevPtr), &device.multipliers64DevPtr);
+    clSetKernelArg(device.kernels[CLKernelSearchNonce], 4, sizeof(device.offsets64DevPtr), &device.offsets64DevPtr);    
     
     clSetKernelArg(device.kernels[CLKernelSieve], 0, sizeof(device.cunningham1), &device.cunningham1);
     clSetKernelArg(device.kernels[CLKernelSieve], 1, sizeof(device.cunningham2), &device.cunningham2);
     clSetKernelArg(device.kernels[CLKernelSieve], 2, sizeof(device.bitwin), &device.bitwin);
     clSetKernelArg(device.kernels[CLKernelSieve], 3, sizeof(device.primorialDevPtr), &device.primorialDevPtr);
     clSetKernelArg(device.kernels[CLKernelSieve], 4, sizeof(device.nonceAndHashDevPtr), &device.nonceAndHashDevPtr);
+    clSetKernelArg(device.kernels[CLKernelSieve], 5, sizeof(device.primesDevPtr), &device.primesDevPtr);
+    clSetKernelArg(device.kernels[CLKernelSieve], 6, sizeof(device.multipliers64DevPtr), &device.multipliers64DevPtr);
+    clSetKernelArg(device.kernels[CLKernelSieve], 7, sizeof(device.offsets64DevPtr), &device.offsets64DevPtr);        
     
     clSetKernelArg(device.kernels[CLFermatTestEnqueue], 0, sizeof(device.nonceAndHashDevPtr), &device.nonceAndHashDevPtr);
     clSetKernelArg(device.kernels[CLFermatTestEnqueue], 1, sizeof(device.primorialDevPtr), &device.primorialDevPtr);
@@ -351,32 +358,32 @@ bool OpenCLMiningRound(OpenCLDeviceContext &device,
   cl_int result;
   if ((result = clEnqueueNDRangeKernel(device.queue, device.kernels[CLKernelSearchNonce],
                                        1, 0, globalThreads, localThreads, 0, 0, &events[0])) != CL_SUCCESS) {
-     fprintf(stderr, "CLKernelSearchNonce launch error!\n");
+     fprintf(stderr, "CLKernelSearchNonce launch error %i!\n", result);
      return false;
   }
   
   if ((result = clEnqueueNDRangeKernel(device.queue, device.kernels[CLKernelSieve],
                                        1, 0, globalThreads, localThreads, 1, &events[0], &events[1])) != CL_SUCCESS) {
-     fprintf(stderr, "CLKernelSieve launch error!\n");
+     fprintf(stderr, "CLKernelSieve launch error %i!\n", result);
      return false;
   }
   
   if ((result = clEnqueueNDRangeKernel(device.queue, device.kernels[CLFermatTestEnqueue],
                                        1, 0, globalThreads, localThreads, 1, &events[1], &events[2])) != CL_SUCCESS) {
-     fprintf(stderr, "CLFermatTestEnqueue launch error!\n");
+     fprintf(stderr, "CLFermatTestEnqueue launch error %i!\n", result);
      return false;
   }  
   
   if ((result = clEnqueueNDRangeKernel(device.queue, device.kernels[CLFermatTestEnqueueBt],
                                        1, 0, globalThreads, localThreads, 1, &events[1], &events[3])) != CL_SUCCESS) {
-     fprintf(stderr, "CLFermatTestEnqueueBt launch error!\n");
+     fprintf(stderr, "CLFermatTestEnqueueBt launch error %i!\n", result);
      return false;
   }    
   
   if ((result = clEnqueueReadBuffer(device.queue, device.resultsDevPtr, CL_TRUE,
                                     0, sizeof(FermatTestResults)*groupsNum,
                                     results, 2, &events[2], &events[4])) != CL_SUCCESS) {
-    fprintf(stderr, "nonceAndHash query error!\n");
+    fprintf(stderr, "nonceAndHash query error %i!\n", result);
     return false;
   }
 
@@ -391,52 +398,6 @@ bool OpenCLMiningRound(OpenCLDeviceContext &device,
   clReleaseEvent(events[3]);
   clReleaseEvent(events[4]);  
   return true;
-}
-
-
-
-void dumpArrayAsC(FILE *hFile, const char *constantName, uint32_t *array, unsigned size)
-{
-  fprintf(hFile, "__constant uint %s[%u] = {\n  ", constantName, size);
-  for (unsigned i = 0; i < size; i++) {
-    if (i) {
-      fprintf(hFile, ", ");
-      if ((i % 8) == 0)
-        fprintf(hFile, "\n  ");
-    }
-    
-    fprintf(hFile, "0x%08X", array[i]);
-  }
-  fprintf(hFile, "\n};\n\n");  
-}
-
-void dumpArrayAsC(FILE *hFile, const char *constantName, uint64_t *array, unsigned size)
-{
-  fprintf(hFile, "__constant ulong %s[%u] = {\n  ", constantName, size);
-  for (unsigned i = 0; i < size; i++) {
-    if (i) {
-      fprintf(hFile, ", ");
-      if ((i % 8) == 0)
-        fprintf(hFile, "\n  ");
-    }
-    
-    fprintf(hFile, "0x%016llX", (unsigned long long)array[i]);
-  }
-  fprintf(hFile, "\n};\n\n");  
-}
-
-int makeConstantsHeader(const char *fileName, unsigned weaveDepth)
-{
-  PrimeSource primeSource(1000000, weaveDepth);
-  std::unique_ptr<FILE, std::function<void(FILE*)>> headerFile(
-    fopen(fileName, "w+"), [](FILE *file) { fclose(file); });
-  
-  if (!headerFile)
-    return logError<int>(0, stderr, "Error: can't open file %s\n", fileName);
-  
-  dumpArrayAsC(headerFile.get(), "primes", primeSource.primesPtr(), weaveDepth);
-  dumpArrayAsC(headerFile.get(), "multipliers64", primeSource.multiplier64Ptr(), weaveDepth);
-  dumpArrayAsC(headerFile.get(), "offsets64", primeSource.offsets64Ptr(), weaveDepth);
 }
 
 #ifdef DEBUG_MINING_AMD_OPENCL

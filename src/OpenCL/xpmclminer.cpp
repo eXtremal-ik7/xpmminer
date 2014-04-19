@@ -226,7 +226,7 @@ int main(int argc, char **argv)
   srand(time(0));  
   blkmk_sha256_impl = sha256;  
   option gOptions[clOptionsNum];
-  PrimeSource primeSource(10000000, gWeaveDepth+256);
+  PrimeSource primeSource(10000000, gWeaveDepth + 256);
   
   bool isBenchmark = false;
   bool useCPU = false;
@@ -339,8 +339,8 @@ int main(int argc, char **argv)
   
   mpz_class primorial;
   PrimorialFast(gPrimorial, primorial, primeSource);
-  if (int error = OpenCLKernelsPrepare(ctx, primorial, GPUMaxSieveSize,
-                                       gWeaveDepth, MaxChainLength, gExtensionsNum))
+  if (int error = OpenCLKernelsPrepare(ctx, primeSource, primorial, GPUMaxSieveSize,
+                                       gWeaveDepth+256, MaxChainLength, gExtensionsNum))
     return error;
   
   if (isBenchmark) {
