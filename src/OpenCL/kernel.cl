@@ -260,7 +260,7 @@ void weave(uint4 M0, uint4 M1, uint4 M2,
   unsigned sieveBytes = L1CacheSize * roundsNum / 8;
   unsigned sieveWords = sieveBytes / 4;
 
-  uint32_t inverseModulos[256]; // <--- large buffer for global memory placing
+  uint32_t inverseModulos[primesPerThread]; // <--- large buffer for global memory placing
   uint32_t inverseModulosCurrent[primesPerThread];          
   
   // Set all bits of output buffers to 1
@@ -3111,7 +3111,7 @@ __kernel void sieve(__global uint32_t *cunningham1Bitfield,
         bitwinBitfield + get_group_id(0) * MaxSieveBufferSize/32,
         localCunningham1,
         localCunningham2,
-        FixedRoundsNum);
+        get_local_size(0) - GroupSize + FixedRoundsNum);
 }
 
 void mul384_1(uint4 l0, uint4 l1, uint4 l2, uint32_t m,
@@ -3132,16 +3132,38 @@ void mul384_1(uint4 l0, uint4 l1, uint4 l2, uint32_t m,
 }
 
 
+#define FermatQueueChunks 16
+#define FermatQueueBufferSize (FermatQueueChunks*GroupSize)
+
+struct FermatQueue {
+  uint32_t position;
+  uint32_t size;
+  uint32_t _align1[2];
+  
+  uint4 chainOrigins[3*FermatQueueBufferSize];
+  uint32_t multipliers[FermatQueueBufferSize];
+  uint32_t chainLengths[FermatQueueBufferSize];
+  uint32_t nonces[FermatQueueBufferSize];
+};
+
+struct FermatTestResults {
+  uint32_t size;
+  uint32_t _align1[3];
+  uint32_t resultTypes[256*FermatQueueChunks];
+  uint32_t resultMultipliers[256*FermatQueueChunks];
+  uint32_t resultChainLength[256*FermatQueueChunks];
+  uint32_t resultNonces[256*FermatQueueChunks];
+};
+
+
 unsigned extractMultipliers2(__global struct GPUNonceAndHash *sieve,
                              __constant uint4 *primorial,
                              __global uint32_t *ptr,
                              __local uint32_t *multipliersPerThread,
                              __local uint32_t *multipliersNum,
-                             __global uint4 *chainOrigins,
-                             __global uint32_t *multipliers,
-                             __global uint32_t *chainLengths,
-                             __global uint32_t *nonces,
-                             unsigned modifier)
+                             __global struct FermatQueue *queue,
+                             unsigned modifier,
+                             unsigned *newSize)
 {
   uint32_t localMultipliers[32];
   uint32_t localIndex = 0;
@@ -3188,49 +3210,33 @@ unsigned extractMultipliers2(__global struct GPUNonceAndHash *sieve,
   uint4 hashl1 = sieve->hash[2*nonceIdx+1];
   uint32_t nonce = sieve->nonce[nonceIdx];
 
+  uint32_t position = queue->position;
+  uint32_t size = queue->size;
+  
   uint4 m0, m1, m2, m3;
+  globalIndex += position + size;
   mul256schoolBook_v3(hashl0, hashl1, primorial[0], primorial[1], &m0, &m1, &m2, &m3);
   for (unsigned i = 0; i < localIndex; i++) {
     uint4 chOrl0, chOrl1, chOrl2;
+    unsigned bufferIdx = (globalIndex+i) % FermatQueueBufferSize;
 
     mul384_1(m0, m1, m2, localMultipliers[i], &chOrl0, &chOrl1, &chOrl2);
     chOrl0.x += modifier;
-    chainOrigins[3*(globalIndex+i)] = chOrl0;
-    chainOrigins[3*(globalIndex+i) + 1] = chOrl1;
-    chainOrigins[3*(globalIndex+i) + 2] = chOrl2;
+    queue->chainOrigins[3*bufferIdx] = chOrl0;
+    queue->chainOrigins[3*bufferIdx + 1] = chOrl1;
+    queue->chainOrigins[3*bufferIdx + 2] = chOrl2;
     
-    multipliers[globalIndex+i] = localMultipliers[i];
-    chainLengths[globalIndex+i] = 0;
-    nonces[globalIndex+i] = nonce;
+    queue->multipliers[bufferIdx] = localMultipliers[i];
+    queue->chainLengths[bufferIdx] = 0;
+    queue->nonces[bufferIdx] = nonce;
   }
 
-  return *multipliersNum;
+  *newSize = size + *multipliersNum;
+  return position;
 }
 
 
-#define FermatQueueChunks 16
-#define FermatQueueBufferSize ((FermatQueueChunks*256) + (FermatQueueChunks*256)/8)
 
-struct FermatQueue {
-  uint32_t size;
-  uint32_t _align1[3];
-  
-  uint4 chainElements[3*FermatQueueBufferSize];
-  uint32_t chainMultipliers[FermatQueueBufferSize];
-  uint32_t chainLengths[FermatQueueBufferSize];
-  uint32_t nonces[FermatQueueBufferSize];
-};
-
-struct FermatTestResults {
-  uint32_t size;
-  uint32_t _align1[3];
-  uint32_t resultTypes[256*FermatQueueChunks];
-  uint32_t resultMultipliers[256*FermatQueueChunks];
-  uint32_t resultChainLength[256*FermatQueueChunks];
-  uint32_t resultNonces[256*FermatQueueChunks];
-};
-
-#pragma pack(pop)
 
 
 void doFermatTestC12(__global struct GPUNonceAndHash *context,
@@ -3248,25 +3254,19 @@ void doFermatTestC12(__global struct GPUNonceAndHash *context,
                      unsigned *outputSize)
   
 {
-  uint32_t queueSize = groupQueue->size;
-  queueSize += extractMultipliers2(context, primorial, bitfield,
-                                   multipliersPerThread, multipliersNum,
-                                   &groupQueue->chainElements[3*queueSize],
-                                   &groupQueue->chainMultipliers[queueSize],
-                                   &groupQueue->chainLengths[queueSize],
-                                   &groupQueue->nonces[queueSize],
-                                   (type == 1 ? -1 : 1));
-  
-  unsigned bufferSize = 0;
-  unsigned groupIdx = 0;
+  uint32_t queueSize;
+  uint32_t position = extractMultipliers2(context, primorial, bitfield,
+                                          multipliersPerThread, multipliersNum,
+                                          groupQueue, (type == 1 ? -1 : 1), &queueSize);
+  barrier(CLK_GLOBAL_MEM_FENCE);
   while (queueSize >= GroupSize) {
-    barrier(CLK_GLOBAL_MEM_FENCE);
-    uint4 chl0 = groupQueue->chainElements[3*(groupIdx*GroupSize + get_local_id(0))];
-    uint4 chl1 = groupQueue->chainElements[3*(groupIdx*GroupSize + get_local_id(0)) + 1];
-    uint4 chl2 = groupQueue->chainElements[3*(groupIdx*GroupSize + get_local_id(0)) + 2];
-    uint32_t chainLength = groupQueue->chainLengths[groupIdx*GroupSize + get_local_id(0)];
-    uint32_t multiplier = groupQueue->chainMultipliers[groupIdx*GroupSize + get_local_id(0)];    
-    uint32_t nonce = groupQueue->nonces[groupIdx*GroupSize + get_local_id(0)];
+    unsigned bufferIdx = (position + get_local_id(0)) % FermatQueueBufferSize ;
+    uint4 chl0 = groupQueue->chainOrigins[3*bufferIdx];
+    uint4 chl1 = groupQueue->chainOrigins[3*bufferIdx + 1];
+    uint4 chl2 = groupQueue->chainOrigins[3*bufferIdx + 2];
+    uint32_t chainLength = groupQueue->chainLengths[bufferIdx];
+    uint32_t multiplier = groupQueue->multipliers[bufferIdx];    
+    uint32_t nonce = groupQueue->nonces[bufferIdx];
     unsigned chainContinue;
     
     uint4 modpowl0, modpowl1, modpowl2;
@@ -3310,14 +3310,14 @@ void doFermatTestC12(__global struct GPUNonceAndHash *context,
     barrier(CLK_LOCAL_MEM_FENCE);
     
     if (chainContinue) {
-      chainLength++;      
-      primeIndex += bufferSize;
-      groupQueue->chainElements[3*primeIndex] = chl0;
-      groupQueue->chainElements[3*primeIndex+1] = chl1;
-      groupQueue->chainElements[3*primeIndex+2] = chl2;
+      chainLength++;
+      primeIndex = (primeIndex + position + queueSize) % FermatQueueBufferSize;
+      groupQueue->chainOrigins[3*primeIndex] = chl0;
+      groupQueue->chainOrigins[3*primeIndex+1] = chl1;
+      groupQueue->chainOrigins[3*primeIndex+2] = chl2;
       groupQueue->chainLengths[primeIndex] = chainLength;
       groupQueue->nonces[primeIndex] = nonce;
-      groupQueue->chainMultipliers[primeIndex] = multiplier;
+      groupQueue->multipliers[primeIndex] = multiplier;
     } else if (chainLength >= 1) {
       resultIndex += *outputSize;
       groupResults->resultTypes[resultIndex] = type;
@@ -3326,28 +3326,12 @@ void doFermatTestC12(__global struct GPUNonceAndHash *context,
       groupResults->resultNonces[resultIndex] = nonce;
     }    
     
-    bufferSize += *primesNum;
     *outputSize += *resultsNum;
-    queueSize -= GroupSize;
-    groupIdx++;
-    
-    if (queueSize < GroupSize) {
-      for (unsigned i = get_local_id(0); i < queueSize; i += GroupSize) {
-        groupQueue->chainElements[3*(bufferSize+i)] = groupQueue->chainElements[3*(groupIdx*GroupSize + i)];
-        groupQueue->chainElements[3*(bufferSize+i)+1] = groupQueue->chainElements[3*(groupIdx*GroupSize + i)+1];
-        groupQueue->chainElements[3*(bufferSize+i)+2] = groupQueue->chainElements[3*(groupIdx*GroupSize + i)+2];
-        
-        groupQueue->chainLengths[bufferSize + i] = groupQueue->chainLengths[groupIdx*GroupSize + i];
-        groupQueue->chainMultipliers[bufferSize + i] = groupQueue->chainMultipliers[groupIdx*GroupSize + i];
-        groupQueue->nonces[bufferSize + i] = groupQueue->nonces[groupIdx*GroupSize + i];    
-      }  
-      
-      queueSize += bufferSize;
-      bufferSize = 0;
-      groupIdx = 0;
-    }
+    position += GroupSize;
+    queueSize -= (GroupSize - *primesNum);
   }
 
+  groupQueue->position = position % FermatQueueBufferSize; 
   groupQueue->size = queueSize;
 }
 
@@ -3370,25 +3354,20 @@ void doFermatTestBt(__global struct GPUNonceAndHash *context,
                     unsigned *outputSize)
 
 {
-  uint32_t queueSize = groupQueue->size;
-  queueSize += extractMultipliers2(context, primorial, bitfield,
-                                   multipliersPerThread, multipliersNum,
-                                   &groupQueue->chainElements[3*queueSize],
-                                   &groupQueue->chainMultipliers[queueSize],
-                                   &groupQueue->chainLengths[queueSize],
-                                   &groupQueue->nonces[queueSize], -1);
+  uint32_t queueSize;
+  uint32_t position = extractMultipliers2(context, primorial, bitfield,
+                                          multipliersPerThread, multipliersNum,
+                                          groupQueue, -1, &queueSize);
   
-  unsigned bufferSize = 0;
-  unsigned groupIdx = 0;
-  
+  barrier(CLK_GLOBAL_MEM_FENCE);
   while (queueSize >= GroupSize) {
-    barrier(CLK_GLOBAL_MEM_FENCE);
-    uint4 chl0 = groupQueue->chainElements[3*(groupIdx*GroupSize + get_local_id(0))];
-    uint4 chl1 = groupQueue->chainElements[3*(groupIdx*GroupSize + get_local_id(0)) + 1];
-    uint4 chl2 = groupQueue->chainElements[3*(groupIdx*GroupSize + get_local_id(0)) + 2];
-    uint32_t chainLength = groupQueue->chainLengths[groupIdx*GroupSize + get_local_id(0)];
-    uint32_t multiplier = groupQueue->chainMultipliers[groupIdx*GroupSize + get_local_id(0)];    
-    uint32_t nonce = groupQueue->nonces[groupIdx*GroupSize + get_local_id(0)];
+    unsigned bufferIdx = (position + get_local_id(0)) % FermatQueueBufferSize;
+    uint4 chl0 = groupQueue->chainOrigins[3*bufferIdx];
+    uint4 chl1 = groupQueue->chainOrigins[3*bufferIdx + 1];
+    uint4 chl2 = groupQueue->chainOrigins[3*bufferIdx + 2];
+    uint32_t chainLength = groupQueue->chainLengths[bufferIdx];
+    uint32_t multiplier = groupQueue->multipliers[bufferIdx];    
+    uint32_t nonce = groupQueue->nonces[bufferIdx];
     uint32_t c1ChainLength = chainLength >> 16;
     
     unsigned chainContinue;
@@ -3447,13 +3426,13 @@ void doFermatTestBt(__global struct GPUNonceAndHash *context,
     barrier(CLK_LOCAL_MEM_FENCE);
     
     if (chainContinue) {
-      primeIndex += bufferSize;
-      groupQueue->chainElements[3*primeIndex] = chl0;
-      groupQueue->chainElements[3*primeIndex+1] = chl1;
-      groupQueue->chainElements[3*primeIndex+2] = chl2;
+      primeIndex = (primeIndex + position + queueSize) % FermatQueueBufferSize;
+      groupQueue->chainOrigins[3*primeIndex] = chl0;
+      groupQueue->chainOrigins[3*primeIndex+1] = chl1;
+      groupQueue->chainOrigins[3*primeIndex+2] = chl2;
       groupQueue->chainLengths[primeIndex] = chainLength;
       groupQueue->nonces[primeIndex] = nonce;
-      groupQueue->chainMultipliers[primeIndex] = multiplier;
+      groupQueue->multipliers[primeIndex] = multiplier;
     } else if (usedChainLength >= 1) {
       resultIndex += *outputSize;
       groupResults->resultTypes[resultIndex] = 3;
@@ -3462,28 +3441,12 @@ void doFermatTestBt(__global struct GPUNonceAndHash *context,
       groupResults->resultNonces[resultIndex] = nonce;
     }    
     
-    bufferSize += *primesNum;
     *outputSize += *resultsNum;
-    queueSize -= GroupSize;
-    groupIdx++;
-    
-    if (queueSize < GroupSize) {
-      for (unsigned i = get_local_id(0); i < queueSize; i += GroupSize) {
-        groupQueue->chainElements[3*(bufferSize+i)] = groupQueue->chainElements[3*(groupIdx*GroupSize + i)];
-        groupQueue->chainElements[3*(bufferSize+i)+1] = groupQueue->chainElements[3*(groupIdx*GroupSize + i)+1];
-        groupQueue->chainElements[3*(bufferSize+i)+2] = groupQueue->chainElements[3*(groupIdx*GroupSize + i)+2];
-        
-        groupQueue->chainLengths[bufferSize + i] = groupQueue->chainLengths[groupIdx*GroupSize + i];
-        groupQueue->chainMultipliers[bufferSize + i] = groupQueue->chainMultipliers[groupIdx*GroupSize + i];
-        groupQueue->nonces[bufferSize + i] = groupQueue->nonces[groupIdx*GroupSize + i];    
-      }  
-      
-      queueSize += bufferSize;
-      bufferSize = 0;
-      groupIdx = 0;
-    }
+    position += GroupSize;
+    queueSize -= (GroupSize - *primesNum);
   }
   
+  groupQueue->position = position % FermatQueueBufferSize; 
   groupQueue->size = queueSize;
 }
 
