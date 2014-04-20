@@ -35,7 +35,7 @@ bool sieveResultsTest(const PrimeSource &primeSource,
         if (!(sieveWord & 0x1))
           continue;        
 
-        unsigned M = i*32 + j/8 + 4*(j&0x7);
+        unsigned M = 8*GPUSieveWindowSize*(i*4/GPUSieveWindowSize) + (i*4 + j/8) % GPUSieveWindowSize + (j&0x7)*GPUSieveWindowSize;
         if (M == 0)
           continue;
         

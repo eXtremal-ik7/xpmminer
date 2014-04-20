@@ -24,8 +24,8 @@ enum OpenCLKernels {
   CLKernelsNum
 }; 
 
-const unsigned GPUSieveWindowSize = 16384;
-const unsigned GPUSieveMaxRoundsNum = 128;
+const unsigned GPUSieveWindowSize = 16384/2;
+const unsigned GPUSieveMaxRoundsNum = 128*2;
 const unsigned GPUMultiprecisionLimbs = 12;
 const unsigned GPUMaxSieveSize = GPUSieveWindowSize*GPUSieveMaxRoundsNum;
 

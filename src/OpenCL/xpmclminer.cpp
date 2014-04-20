@@ -231,7 +231,6 @@ int main(int argc, char **argv)
   srand(time(0));  
   blkmk_sha256_impl = sha256;  
   option gOptions[clOptionsNum];
-  PrimeSource primeSource(10000000, gWeaveDepth + 256);
   
   bool isBenchmark = false;
   bool useCPU = false;
@@ -342,6 +341,7 @@ int main(int argc, char **argv)
                              gExtensionsNum, gChainLength, useCPU, disableOpt))
     return error;
   
+  PrimeSource primeSource(10000000, gWeaveDepth + 256);  
   mpz_class primorial;
   PrimorialFast(gPrimorial, primorial, primeSource);
   
@@ -367,7 +367,6 @@ int main(int argc, char **argv)
 
       printf("   * sieve performance test\n");      
       sieveBenchmark(primeSource, primorial, device, 10.5, false);      
-      
       
       printf("   * mine with checking results\n");      
       gpuMinerBenchmark(device, 10.5, 32, true);      

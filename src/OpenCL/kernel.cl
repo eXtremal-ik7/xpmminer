@@ -15,7 +15,7 @@ typedef unsigned long uint64_t;
 // #define FixedRoundsNum (80)
 
 #define GPUMultiprecisionLimbs (12)
-#define MaxRoundsNum (128)
+#define MaxRoundsNum (256)
 #define MaxChainLength (20)
 //#define MaxWeaveDepth (6144+256)
 #define MaxSieveSize (L1CacheSize*MaxRoundsNum)
@@ -151,96 +151,27 @@ void clFillMemoryByGroup(__global void *buffer, unsigned size)
     ptr32[i] = 0xFFFFFFFF;
 }
 
-uint32_t bitPackLow(__local uint32_t *ptr, unsigned index)
-{
-  __local uint4 *lptr = (__local uint4*)ptr;
-  uint4 ldata1 = lptr[index*2] | lptr[index*2+1];
-  return ldata1.x | ldata1.y | ldata1.z | ldata1.w;
-}
-
 void flushLayer(unsigned layer,
-                __global uint32_t *cunningham1,
-                __global uint32_t *cunningham2,
-                __global uint32_t *bitwin,
-                uint2 CR1,
-                uint2 CR2,
+                __global uint8 *cunningham1,
+                __global uint8 *cunningham2,
+                __global uint8 *bitwin,
+                uint8 CR1,
+                uint8 CR2,
                 unsigned threadId)
 {
   if (layer < ChainLength/2) {
-    cunningham1[threadId] &= CR1.x;
-    cunningham1[threadId + GroupSize*1] &= CR1.y;    
+    cunningham1[threadId] &= CR1;
+    cunningham2[threadId] &= CR2;
     
-    cunningham2[threadId] &= CR2.x;
-    cunningham2[threadId + GroupSize*1] &= CR2.y;
-
     CR1 &= CR2;    
-    bitwin[threadId] &= CR1.x;
-    bitwin[threadId + GroupSize*1] &= CR1.y;
+    bitwin[threadId] &= CR1;
   } else if (layer < (ChainLength + 1)/2) {
-    cunningham1[threadId] &= CR1.x;
-    cunningham2[threadId] &= CR2.x;
-    bitwin[threadId] &= CR1.x;
-
-    cunningham1[threadId + GroupSize*1] &= CR1.y;
-    cunningham2[threadId + GroupSize*1] &= CR2.y;
-    bitwin[threadId + GroupSize*1] &= CR1.y;
+    cunningham1[threadId] &= CR1;
+    cunningham2[threadId] &= CR2;
+    bitwin[threadId] &= CR1;
   } else if (layer < ChainLength) {
-    cunningham1[threadId] &= CR1.x;
-    cunningham2[threadId] &= CR2.x;
-    cunningham1[threadId + GroupSize*1] &= CR1.y;
-    cunningham2[threadId + GroupSize*1] &= CR2.y;
-  }
-}
-
-void flushLayer4(unsigned layer,
-                 __global uint32_t *cunningham1,
-                 __global uint32_t *cunningham2,
-                 __global uint32_t *bitwin,
-                 uint4 CR1,
-                 uint4 CR2,
-                 unsigned threadId)
-{
-  if (layer < ChainLength/2) {
-    cunningham1[threadId] &= CR1.x;
-    cunningham1[threadId + GroupSize*1] &= CR1.y;
-    cunningham1[threadId + GroupSize*2] &= CR1.z;
-    cunningham1[threadId + GroupSize*3] &= CR1.w;
-    
-    cunningham2[threadId] &= CR2.x;
-    cunningham2[threadId + GroupSize*1] &= CR2.y;
-    cunningham2[threadId + GroupSize*2] &= CR2.z;
-    cunningham2[threadId + GroupSize*3] &= CR2.w;
-    
-    CR1 &= CR2;
-    bitwin[threadId] &= CR1.x;
-    bitwin[threadId + GroupSize*1] &= CR1.y;
-    bitwin[threadId + GroupSize*2] &= CR1.z;
-    bitwin[threadId + GroupSize*3] &= CR1.w;
-  } else if (layer < (ChainLength + 1)/2) {
-    cunningham1[threadId] &= CR1.x;
-    cunningham1[threadId + GroupSize*1] &= CR1.y;
-    cunningham1[threadId + GroupSize*2] &= CR1.z;
-    cunningham1[threadId + GroupSize*3] &= CR1.w;
-    
-    cunningham2[threadId] &= CR2.x;
-    cunningham2[threadId + GroupSize*1] &= CR2.y;
-    cunningham2[threadId + GroupSize*2] &= CR2.z;
-    cunningham2[threadId + GroupSize*3] &= CR2.w;
-
-    bitwin[threadId] &= CR1.x;
-    bitwin[threadId + GroupSize*1] &= CR1.y;
-    bitwin[threadId + GroupSize*2] &= CR1.z;
-    bitwin[threadId + GroupSize*3] &= CR1.w;
-  } else if (layer < ChainLength) {
-    cunningham1[threadId] &= CR1.x;
-    cunningham1[threadId + GroupSize*1] &= CR1.y;
-    cunningham1[threadId + GroupSize*2] &= CR1.z;
-    cunningham1[threadId + GroupSize*3] &= CR1.w;
-    
-    cunningham2[threadId] &= CR2.x;
-    cunningham2[threadId + GroupSize*1] &= CR2.y;
-    cunningham2[threadId + GroupSize*2] &= CR2.z;
-    cunningham2[threadId + GroupSize*3] &= CR2.w;
+    cunningham1[threadId] &= CR1;
+    cunningham2[threadId] &= CR2;
   }
 }
 
@@ -262,8 +193,8 @@ void weave(uint4 M0, uint4 M1, uint4 M2,
   unsigned sieveBytes = L1CacheSize * roundsNum / 8;
   unsigned sieveWords = sieveBytes / 4;
 
-  uint32_t inverseModulos[primesPerThread]; // <--- large buffer for global memory placing
-  uint32_t inverseModulosCurrent[primesPerThread];          
+  uint32_t inverseModulos[256]; // <--- large buffer for global memory placing
+  uint32_t inverseModulosCurrent[WeaveDepth / GroupSize];          
   
   // Set all bits of output buffers to 1
   clFillMemoryByGroup(cunningham1Bitfield, sieveBytes);
@@ -290,8 +221,8 @@ void weave(uint4 M0, uint4 M1, uint4 M2,
   __local uint32_t *localCunningham1_32 = (__local uint32_t*)localCunningham1;
   __local uint32_t *localCunningham2_32 = (__local uint32_t*)localCunningham2;
 
-  for (unsigned round = 0; round < roundsNum; round++) {
-    const unsigned lowIdx = L1CacheSize * round;
+  for (unsigned round = 0; round < roundsNum; round += 8) {
+    unsigned lowIdx = L1CacheSize * round;
     for (unsigned i = 0; i < primesPerThread; i++)
       inverseModulosCurrent[i] = inverseModulos[i];
     
@@ -301,12 +232,10 @@ void weave(uint4 M0, uint4 M1, uint4 M2,
 
       barrier(CLK_LOCAL_MEM_FENCE);      
       for (unsigned i = 0, index = get_local_id(0); i < L1CacheWords/GroupSize; i++, index += GroupSize) {
-        uint32_t X = 0x01010101 << (index%8);
+        uint32_t X = 0xFFFFFFFF;
         localCunningham1_32[index] = X;
         localCunningham2_32[index] = X;        
       }
-      
-      barrier(CLK_LOCAL_MEM_FENCE);
      
       unsigned primeIdx;
       for (unsigned j = 0, primeIdx = FixedPrimorial+threadId; j < FirstLargePrimeIndex/get_local_size(0); j++, primeIdx += GroupSize) {
@@ -318,44 +247,67 @@ void weave(uint4 M0, uint4 M1, uint4 M2,
 
         offset = calculateOffset(currentPrime, currentPrimeMod, inverseModulo);
         offset2 = calculateOffset(currentPrime, currentPrimeMod, currentPrime - inverseModulo);
-        unsigned maxoffset = max(offset, offset2);
-        while (maxoffset < L1CacheSize) {
-          localCunningham1[offset] = 0;
-          localCunningham2[offset2] = 0;          
-          offset += currentPrime;          
-          offset2 += currentPrime;
-          maxoffset += currentPrime;
-        }
         
-        if (offset < L1CacheSize)
-          localCunningham1[offset] = 0;   
-        if (offset2 < L1CacheSize)
-          localCunningham2[offset2] = 0;        
+        for (unsigned iter = 0; iter < 8; iter++) {        
+          barrier(CLK_LOCAL_MEM_FENCE);            
+          uint8_t fill = ~(1 << iter);
+
+          unsigned maxOffset = max(offset, offset2);
+          while (maxOffset < L1CacheSize) {
+            localCunningham1[offset] &= fill;
+            localCunningham2[offset2] &= fill;
+            offset += currentPrime;
+            offset2 += currentPrime;
+            maxOffset += currentPrime;
+          }
+          
+          if (offset < L1CacheSize) {
+            localCunningham1[offset] &= fill;
+            offset += currentPrime;
+          }
+          
+          if (offset2 < L1CacheSize) {
+            localCunningham2[offset2] &= fill;
+            offset2 += currentPrime;
+          }          
+
+          offset -= L1CacheSize;
+          offset2 -= L1CacheSize;        
+        }
         
         inverseModulosCurrent[j] = (inverseModulo & 0x1) ?
           (inverseModulo + currentPrime) / 2 : inverseModulo / 2;
       }
-      barrier(CLK_LOCAL_MEM_FENCE);      
+
 
       for (unsigned j = FirstLargePrimeIndex/GroupSize,
              primeIdx = FirstLargePrimeIndex+FixedPrimorial+threadId;
            j < primesPerThread;
            j++, primeIdx += GroupSize) {
-        unsigned offset;
         const uint32_t currentPrime = primes[primeIdx];
         const uint32_t currentPrimeMod = lowIdx % currentPrime;        
         const uint32_t inverseModulo = inverseModulosCurrent[j];
        
-        offset = calculateOffset(currentPrime, currentPrimeMod, inverseModulo);
-        if (offset < L1CacheSize)
-          localCunningham1[offset] = 0;
-        
-        offset = calculateOffset(currentPrime, currentPrimeMod, currentPrime - inverseModulo);
-        if (offset < L1CacheSize)
-          localCunningham2[offset] = 0;
+        unsigned offset = calculateOffset(currentPrime, currentPrimeMod, inverseModulo);
+        unsigned offset2 = calculateOffset(currentPrime, currentPrimeMod, currentPrime - inverseModulo);
+      
+        for (unsigned iter = 0; iter < 8; iter++) {
+          uint8_t fill = ~(1 << iter);          
+          if (offset < L1CacheSize) {
+            localCunningham1[offset] &= fill;
+            offset += currentPrime;
+          }
+          if (offset2 < L1CacheSize) {
+            localCunningham2[offset2] &= fill;
+            offset2 += currentPrime;
+          }
+          
+          offset -= L1CacheSize;
+          offset2 -= L1CacheSize;
+        }
         
         inverseModulosCurrent[j] = (inverseModulo & 0x1) ?
-        (inverseModulo + currentPrime) / 2 : inverseModulo / 2;
+          (inverseModulo + currentPrime) / 2 : inverseModulo / 2;
       } 
 
       barrier(CLK_LOCAL_MEM_FENCE);
@@ -364,23 +316,16 @@ void weave(uint4 M0, uint4 M1, uint4 M2,
       __global uint32_t *cunningham1 = cunningham1Bitfield + lowIdx/32;
       __global uint32_t *cunningham2 = cunningham2Bitfield + lowIdx/32;
       __global uint32_t *bitwin = bitwinBitfield + lowIdx/32;
- 
-      uint2 CR1 = {
-        bitPackLow(localCunningham1_32, threadId),
-        bitPackLow(localCunningham1_32, threadId+GroupSize*1)
-      };
-      
-      uint2 CR2 = {
-        bitPackLow(localCunningham2_32, threadId),
-        bitPackLow(localCunningham2_32, threadId+GroupSize*1)
-      };
 
+      uint8 CR1 = vload8(threadId, localCunningham1_32);
+      uint8 CR2 = vload8(threadId, localCunningham2_32);
+      
       flushLayer(layer, cunningham1, cunningham2, bitwin, CR1, CR2, threadId);
       
       // Flush window to extensions
       if (round < roundsNum/2)
         continue;
-
+      
       unsigned extNumMin = layer < ChainLength ? 1 : layer - ChainLength + 1;
       unsigned extNumMax = layer < ExtensionsNum ? layer : ExtensionsNum;
       for (unsigned extNum = extNumMin; extNum <= extNumMax; extNum++) {
@@ -3201,7 +3146,8 @@ unsigned extractMultipliers2(__global struct GPUNonceAndHash *sieve,
       
       for (unsigned j = 0; j < c32; j++, word >>= 1) {
         if (word & 0x1) {
-          localMultipliers[localIndex++] = (i*32 + j/8 + 4*(j&0x7)) * (1 << extNum);
+          unsigned M = 8*L1CacheSize*(i*4/L1CacheSize) + (i*4 + j/8) % L1CacheSize + (j&0x7)*L1CacheSize;
+          localMultipliers[localIndex++] = M << extNum;
         }
       }
       
