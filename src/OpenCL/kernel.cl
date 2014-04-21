@@ -2911,6 +2911,7 @@ struct GPUNonceAndHash {
   uint32_t nonce[256];
   uint32_t currentNonce;
   uint32_t totalNonces;
+  uint32_t align[2];
 };
 #pragma pack(pop, 1)
 
@@ -3095,8 +3096,9 @@ void mul384_1(uint4 l0, uint4 l1, uint4 l2, uint32_t m,
 
 
 #define FermatQueueChunks 16
-#define FermatQueueBufferSize (FermatQueueChunks*GroupSize)
+#define FermatQueueBufferSize (FermatQueueChunks*256)
 
+#pragma pack(push, 1)
 struct FermatQueue {
   uint32_t position;
   uint32_t size;
@@ -3116,7 +3118,7 @@ struct FermatTestResults {
   uint32_t resultChainLength[256*FermatQueueChunks];
   uint32_t resultNonces[256*FermatQueueChunks];
 };
-
+#pragma pack(pop)
 
 unsigned extractMultipliers2(__global struct GPUNonceAndHash *sieve,
                              __constant uint4 *primorial,

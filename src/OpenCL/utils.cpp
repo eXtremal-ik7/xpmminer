@@ -62,6 +62,42 @@ static char *readFile(const char *name)
   return kernelSource.release();
 }
 
+int compileKernel(cl_platform_id targetPlatform,
+                  size_t devicesNum,
+                  cl_device_id *devices,
+                  const char *kernelFile,
+                  const char *kernelSource,
+                  const char *cmdLine,
+                  cl_context *context,
+                  cl_program *program)
+{
+  cl_context_properties contextProperties[] = {
+    CL_CONTEXT_PLATFORM, (cl_context_properties)targetPlatform, 0
+  };  
+  
+  cl_int clResult;
+  *context = clCreateContext(contextProperties, devicesNum, devices, 0, 0, &clResult);
+  if (clResult != CL_SUCCESS || !*context)
+    return logError(1, stderr, " * Error: can't create OpenCL context for this device");  
+  
+  *program = clCreateProgramWithSource(*context, 1, &kernelSource, 0, &clResult);
+  if (clResult != CL_SUCCESS || *program == 0)
+    return logError(1, stderr, "Error: can't compile OpenCL kernel %s\n", kernelFile);
+  
+  if (clBuildProgram(*program, devicesNum, devices, cmdLine, 0, 0) != CL_SUCCESS) {    
+    size_t logSize;
+    clGetProgramBuildInfo(*program, devices[0], CL_PROGRAM_BUILD_LOG, 0, 0, &logSize);
+    
+    std::unique_ptr<char[]> log(new char[logSize]);
+    clGetProgramBuildInfo(*program, devices[0], CL_PROGRAM_BUILD_LOG, logSize, log.get(), 0);
+    fprintf(stderr, "%s\n", log.get());
+    
+    return logError(1, stderr, "Error: can't compile OpenCL kernel %s", kernelFile);
+  }
+  
+  return 0;
+}
+
 int OpenCLInit(OpenCLPlatrormContext &ctx,
                const char *targetPlatformName,
                std::vector<unsigned> &deviceFilter,
@@ -152,6 +188,9 @@ int OpenCLInit(OpenCLPlatrormContext &ctx,
   if (!kernelSource)
     return 1;
   
+  bool isNVidia = strcmp(targetPlatformName, "NVIDIA Corporation") == 0;
+  bool useSeparateContext = isNVidia;
+  
   // Retrieving OpenCL devices list
   ctx.devicesNum = 0;
   clGetDeviceIDs(targetPlatform,
@@ -166,36 +205,32 @@ int OpenCLInit(OpenCLPlatrormContext &ctx,
                      ctx.devicesNum,
                      devices.get(), 0) != CL_SUCCESS)
     return logError(1, stderr, "Error: can't query '%s' devices\n", targetPlatformName);
-  
-  // context creation
-  cl_context_properties contextProperties[] = {
-    CL_CONTEXT_PLATFORM, (cl_context_properties)targetPlatform, 0
-  };      
-  
-  cl_context context = clCreateContext(contextProperties, ctx.devicesNum, devices.get(), 0, 0, &clResult);
-  if (clResult != CL_SUCCESS || !context)
-    return logError(1, stderr, " * Error: can't create OpenCL context for this device");  
-  
-  ctx.program = clCreateProgramWithSource(context, 1, &kernelSource, 0, &clResult);
-  if (clResult != CL_SUCCESS || ctx.program == 0)
-    return logError(1, stderr, "Error: can't compile OpenCL kernel %s\n", kernelFile);
-  
-  if (clBuildProgram(ctx.program, ctx.devicesNum, devices.get(), cmdLine.c_str(), 0, 0) != CL_SUCCESS) {    
-    size_t logSize;
-    clGetProgramBuildInfo(ctx.program, devices[0], CL_PROGRAM_BUILD_LOG, 0, 0, &logSize);
-    
-    std::unique_ptr<char[]> log(new char[logSize]);
-    clGetProgramBuildInfo(ctx.program, devices[0], CL_PROGRAM_BUILD_LOG, logSize, log.get(), 0);
-    fprintf(stderr, "%s\n", log.get());
-    
-    return logError(1, stderr, "Error: can't compile OpenCL kernel %s", kernelFile);
-  }  
+
+  cl_context context = 0;
+  cl_program program = 0;
+  if (!useSeparateContext) {
+    int result = compileKernel(targetPlatform, ctx.devicesNum, devices.get(),
+                               kernelFile, kernelSource, cmdLine.c_str(),
+                               &context, &program);
+    if (result != 0)
+      return result;
+  }
   
   ctx.devices.reset(new OpenCLDeviceContext[ctx.devicesNum]);
   for (cl_uint i = 0; i < ctx.devicesNum; i++) {
     OpenCLDeviceContext &deviceCtx = ctx.devices[i];    
 
-    deviceCtx.context = context;
+    deviceCtx.device = devices[i];
+    if (!useSeparateContext) {
+      deviceCtx.context = context;
+      deviceCtx.program = program;
+    } else {
+      int result = compileKernel(targetPlatform, 1, &devices[i],
+                                 kernelFile, kernelSource, cmdLine.c_str(),
+                                 &deviceCtx.context, &deviceCtx.program);
+      if (result != 0)
+        return result;
+    }
     
     // detect device name and number of compute units
     char deviceName[128] = {0};
@@ -207,9 +242,9 @@ int OpenCLInit(OpenCLPlatrormContext &ctx,
     fprintf(stderr, "[%u] %s; %u compute units\n", (unsigned)i, deviceName, computeUnits);
     
     deviceCtx.groupSize = 256;
-    deviceCtx.groupsNum = computeUnits*4;    
+    deviceCtx.groupsNum = isNVidia ? computeUnits*6 : computeUnits*4;
     
-    deviceCtx.queue = clCreateCommandQueue(context, devices[i], 0, &clResult);
+    deviceCtx.queue = clCreateCommandQueue(deviceCtx.context, devices[i], 0, &clResult);
     if (clResult != CL_SUCCESS || !deviceCtx.queue)
       return logError(1, stderr, " * Error: can't create command queue for this device\n");
     
@@ -242,7 +277,7 @@ int OpenCLKernelsPrepare(OpenCLPlatrormContext &platform,
   
   device.kernels.reset(new cl_kernel[CLKernelsNum]);
   for (size_t i = 0; i < CLKernelsNum; i++) {
-    device.kernels[i] = clCreateKernel(platform.program, gOpenCLKernelNames[i], &clResult);
+    device.kernels[i] = clCreateKernel(device.program, gOpenCLKernelNames[i], &clResult);
     if (clResult != CL_SUCCESS)
       return logError(1, stderr, "Error: can't find function %s in kernel\n",
                       gOpenCLKernelNames[i]);
