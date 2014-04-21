@@ -187,7 +187,6 @@ void weave(uint4 M0, uint4 M1, uint4 M2,
            __global uint32_t *offsets64,
            unsigned roundsNum)
 {
-  const unsigned primesPerThread = WeaveDepth / GroupSize;  
   const unsigned layersNum = ChainLength + ExtensionsNum;
   const unsigned threadId = get_local_id(0);
   unsigned sieveBytes = L1CacheSize * roundsNum / 8;

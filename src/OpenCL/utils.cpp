@@ -123,7 +123,8 @@ int OpenCLInit(OpenCLPlatrormContext &ctx,
     {"GroupSize", 256},
     {"ExtensionsNum", extensionsNum},
     {"ChainLength", chainLength},
-    {"FixedRoundsNum", sieveSize / sieveWindowSize}
+    {"FixedRoundsNum", sieveSize / sieveWindowSize},
+    {"primesPerThread", weaveDepth/ 256}
   };
   
   std::string cmdLine;
@@ -134,7 +135,7 @@ int OpenCLInit(OpenCLPlatrormContext &ctx,
   cmdLine.push_back(' ');
   
   for (size_t i = 0; i < sizeof(arguments) / sizeof(cmdLineArg); i++) {
-    char buffer[16];
+    char buffer[20];
     snprintf(buffer, sizeof(buffer), "%u", arguments[i].value);
     cmdLine.append(" -D");
     cmdLine.append(arguments[i].name);
