@@ -45,4 +45,5 @@ install(TARGETS xpmclminer DESTINATION bin)
 install(FILES 
   ${CMAKE_SOURCE_DIR}/OpenCL/kernel.cl
   ${CMAKE_SOURCE_DIR}/OpenCL/sha256.h
+  ${CMAKE_SOURCE_DIR}/OpenCL/fmt.h  
   DESTINATION share/xpmminer)

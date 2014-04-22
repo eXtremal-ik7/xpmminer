@@ -1,9 +1,10 @@
-#include "sha256.h"
-#pragma OPENCL EXTENSION cl_amd_printf : enable
-
 typedef unsigned char uint8_t;
 typedef unsigned int uint32_t;
 typedef unsigned long uint64_t;
+
+#include "sha256.h"
+#include "fmt.h"
+#pragma OPENCL EXTENSION cl_amd_printf : enable
 
 // You must define this parameters through compiler command line
 // #define FixedPrimorial 19
@@ -2904,17 +2905,6 @@ __kernel void modulo640to512test(__global uint32_t *dividends,
   }
 }
 
-
-#pragma pack(push, 1)
-struct GPUNonceAndHash {
-  uint4 hash[2*256];
-  uint32_t nonce[256];
-  uint32_t currentNonce;
-  uint32_t totalNonces;
-  uint32_t align[2];
-};
-#pragma pack(pop, 1)
-
 __kernel void searchNonce(__constant uint4 *block,
                           __global struct GPUNonceAndHash *nonceAndHash,
                           __constant uint32_t *primes,
@@ -3094,31 +3084,6 @@ void mul384_1(uint4 l0, uint4 l1, uint4 l2, uint32_t m,
          (uint4){h1.w, h2.x, h2.y, h2.z});
 }
 
-
-#define FermatQueueChunks 16
-#define FermatQueueBufferSize (FermatQueueChunks*256)
-
-#pragma pack(push, 1)
-struct FermatQueue {
-  uint32_t position;
-  uint32_t size;
-  uint32_t _align1[2];
-  
-  uint4 chainOrigins[3*FermatQueueBufferSize];
-  uint32_t multipliers[FermatQueueBufferSize];
-  uint32_t chainLengths[FermatQueueBufferSize];
-  uint32_t nonces[FermatQueueBufferSize];
-};
-
-struct FermatTestResults {
-  uint32_t size;
-  uint32_t _align1[3];
-  uint32_t resultTypes[256*FermatQueueChunks];
-  uint32_t resultMultipliers[256*FermatQueueChunks];
-  uint32_t resultChainLength[256*FermatQueueChunks];
-  uint32_t resultNonces[256*FermatQueueChunks];
-};
-#pragma pack(pop)
 
 unsigned extractMultipliers2(__global struct GPUNonceAndHash *sieve,
                              __constant uint4 *primorial,

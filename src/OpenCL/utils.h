@@ -3,6 +3,9 @@
 #include <memory>
 #include <vector>
 
+#define __HOST__
+#include "fmt.h"
+
 enum OpenCLKernels {
   CLKernelSearchNonce = 0,
   CLKernelSieve,
@@ -28,47 +31,6 @@ const unsigned GPUSieveWindowSize = 16384/2;
 const unsigned GPUSieveMaxRoundsNum = 128*2;
 const unsigned GPUMultiprecisionLimbs = 12;
 const unsigned GPUMaxSieveSize = GPUSieveWindowSize*GPUSieveMaxRoundsNum;
-
-#define FermatQueueChunks 16
-#define FermatQueueBufferSize ((FermatQueueChunks*256) + (FermatQueueChunks*256)/8)
-
-#pragma pack(push, 1)
-struct GPUNonceAndHash {
-  uint32_t hash[8*256];
-  uint32_t nonce[256];
-  uint32_t currentNonce;
-  uint32_t totalNonces;  
-  uint32_t align[2];
-};
-
-struct GPUResult {
-  union {
-    uint32_t multiplier;
-    uint32_t multipliersNum;
-  };
-  uint32_t chainLength;
-};
-
-struct FermatQueue {
-  uint32_t size;
-  uint32_t _align1[3];
-  
-  uint32_t chainElements[3*4*FermatQueueBufferSize];
-  uint32_t chainMultipliers[FermatQueueBufferSize];
-  uint32_t chainLengths[FermatQueueBufferSize];
-  uint32_t nonces[FermatQueueBufferSize];
-};
-
-struct FermatTestResults {
-  uint32_t size;
-  uint32_t _align1[3];
-  uint32_t resultTypes[256*FermatQueueChunks];  
-  uint32_t resultMultipliers[256*FermatQueueChunks];
-  uint32_t resultChainLength[256*FermatQueueChunks];
-  uint32_t resultNonces[256*FermatQueueChunks];
-};
-
-#pragma pack(pop)
 
 struct OpenCLDeviceContext {
   cl_context context;
