@@ -2,6 +2,7 @@
 #define __GETBLOCKTEMPLATE_H_
 
 #include <curl/curl.h>
+#include <pthread.h>
 
 extern "C" {
   #include "blkmaker.h"

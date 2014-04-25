@@ -1,4 +1,5 @@
 #include "CSieveOfEratosthenesL1Ext.h"
+#include "config.h"
 #include "system.h"
 #include <limits>
 #include <vector>
@@ -163,8 +164,13 @@ static uint32_t longModuloByMul(uint32_t *number,
   uint64_t mod = 0;
   size_t limbsNum = number[0];
   for (uint32_t i = limbsNum; i > 0; i--) {
+#if (INT128_SIZE == 16)
     __int128 dividend = (mod << 32) + (uint64_t)number[i];
-    uint64_t quote = (dividend*multiplier) >> shift;
+    uint64_t quote = (dividend*multiplier) >> shift;    
+#else
+    uint64_t dividend = (mod << 32) + (uint64_t)number[i];
+    uint64_t quote = dividend / (uint64_t)divider;    
+#endif
     mod = (uint64_t)dividend - quote*divider;
   }
   

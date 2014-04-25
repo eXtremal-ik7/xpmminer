@@ -32,6 +32,14 @@ target_link_libraries(xpmclminer
 
 if (OS_LINUX)
   target_link_libraries(xpmclminer pthread)
+elseif (OS_WINDOWS)
+  set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++ -static")
+  target_link_libraries(xpmclminer
+    ${PTHREAD_LIBRARY}
+    ${Z_LIBRARY}
+    ws2_32
+    wldap32
+  )
 endif()
 
 if (DEBUG_MINING_AMD_OPENCL)

@@ -1,6 +1,7 @@
 #include "getblocktemplate.h"
 #include "primecoin.h"
 #include "Debug.h"
+#include "system.h"
 
 #include <unistd.h>
 #include <memory>
@@ -155,7 +156,8 @@ void GetBlockTemplateContext::queryWork()
     } else {
       updateWork();
     }
-    sleep(_timeout);
+    
+    xsleep(_timeout);
   }
 }
 

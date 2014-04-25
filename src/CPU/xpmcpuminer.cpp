@@ -497,7 +497,7 @@ int main(int argc, char **argv)
   
   refresh();
   while (true) {
-    sleep(5);    
+    xsleep(5);  
     uint64_t foundChains[MaxChainLength];
     double speed = 0.0;
     double averageSpeed = 0.0;

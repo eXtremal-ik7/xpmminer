@@ -1,27 +1,20 @@
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdint.h>
+#include <chrono>
+#if defined(__GXX_EXPERIMENTAL_CXX0X__) && (__cplusplus < 201103L)
+#define steady_clock monotonic_clock
+#endif  
 
 enum PathTy {
   PtExecutable = 0,
   PtLibrary,
   PtData
 };
-  
-struct timeMark {
-  uint64_t mark;
-};
 
-typedef struct timeMark timeMark;
+typedef std::chrono::time_point<std::chrono::steady_clock> timeMark;
 
 timeMark getTimeMark();
 uint64_t usDiff(timeMark first, timeMark second);
 
 const char *installPrefix();
 const char *buildPath(PathTy type, const char *fileName);
-
-#ifdef __cplusplus
-}
-#endif
+void xsleep(unsigned seconds);

@@ -2,6 +2,7 @@
 #define __CONFIG_H_
 
 #define IS_BIGENDIAN ${IS_BIGENDIAN}
+#define INT128_SIZE ${INT128_SIZE}
 
 #ifdef __cplusplus
 inline bool is_bigendian() {

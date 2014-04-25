@@ -1,7 +1,8 @@
 #include "system.h"
 #ifdef WIN32
-#include <Windows.h>
+#include <windows.h>
 #else
+#include <unistd.h>
 #include <sys/time.h>
 #endif
 
@@ -11,33 +12,13 @@
 
 timeMark getTimeMark()
 {
-  timeMark mark;  
-#ifdef WIN32
-  LARGE_INTEGER win32Mark;
-  QueryPerformanceCounter(&win32Mark);
-  mark.mark = win32Mark.QuadPart;
-#else
-  struct timeval t;
-  gettimeofday(&t, 0);
-  mark.mark = t.tv_sec * 1000000 + t.tv_usec;
-#endif
-  return mark;  
+  return std::chrono::steady_clock::now();
 }
 
 
 uint64_t usDiff(timeMark first, timeMark second)
 {
-#ifdef WIN32
-  LARGE_INTEGER win32Frequency;
-  QueryPerformanceFrequency(&win32Frequency);
-  return (uint64_t)((second.mark - first.mark) /
-                    (double)win32Frequency.QuadPart * 1000000.0);
-  return 0;
-#else
-  uint64_t realSecond = (second.mark >= first.mark) ? second.mark :
-    second.mark + 24*3600*(uint64_t)1000000;
-  return realSecond - first.mark;    
-#endif
+  return std::chrono::duration_cast<std::chrono::microseconds>(second-first).count();
 }
 
 const char *installPrefix()
@@ -86,4 +67,13 @@ const char *buildPath(PathTy type, const char *fileName)
   strcat(path, fileName);
   return (const char*)path;
   
+}
+
+void xsleep(unsigned seconds)
+{
+#ifndef WIN32
+    sleep(seconds);
+#else
+    Sleep(seconds*1000);
+#endif   
 }

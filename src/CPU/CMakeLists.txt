@@ -24,6 +24,14 @@ target_link_libraries(xpmcpuminer
 
 if (OS_LINUX)
   target_link_libraries(xpmcpuminer pthread)
+elseif (OS_WINDOWS)
+  set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++ -static")
+  target_link_libraries(xpmcpuminer
+    ${PTHREAD_LIBRARY}
+    ${Z_LIBRARY}
+    ws2_32
+    wldap32
+  )
 endif()
 
 install(TARGETS xpmcpuminer DESTINATION bin)
