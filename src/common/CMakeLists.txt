@@ -1,4 +1,7 @@
-include_directories(${GMP_INCLUDE_DIRECTORY})
+include_directories(
+  ${GMP_INCLUDE_DIRECTORY}
+  ${OPENSSL_INCLUDE_DIR}
+)
 
 add_library(common STATIC
   CSieveOfEratosthenesL1Ext.cpp
