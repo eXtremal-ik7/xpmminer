@@ -15,8 +15,8 @@ target_link_libraries(xpmcpuminer
   blkmaker
   ${GMP_LIBRARY}
   ${GMPXX_LIBRARY}
-  ${SSL_LIBRARY}
-  ${CRYPTO_LIBRARY}
+  ${OPENSSL_CRYPTO_LIBRARY}
+  ${OPENSSL_SSL_LIBRARY}
   ${CURL_LIBRARY}
   ${JANSSON_LIBRARY}
   ${NCURSES_LIBRARY}
