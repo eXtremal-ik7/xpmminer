@@ -4,6 +4,7 @@
 #include "system.h"
 
 #include <unistd.h>
+#include <functional>
 #include <memory>
 #include <string>
 
