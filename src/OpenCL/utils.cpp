@@ -2,7 +2,7 @@
 #include "system.h"
 #include "utils.h"
 #include <string.h>
-
+#include <functional>
 
 static const char *gOpenCLKernelNames[] = {
   "searchNonce",

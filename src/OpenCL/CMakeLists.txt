@@ -22,8 +22,8 @@ target_link_libraries(xpmclminer
   blkmaker
   ${GMP_LIBRARY}
   ${GMPXX_LIBRARY}
-  ${SSL_LIBRARY}
-  ${CRYPTO_LIBRARY}
+  ${OPENSSL_SSL_LIBRARY}
+  ${OPENSSL_CRYPTO_LIBRARY}
   ${CURL_LIBRARY}
   ${JANSSON_LIBRARY}
   ${OPENCL_LIBRARIES}
