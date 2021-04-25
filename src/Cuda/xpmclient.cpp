@@ -109,12 +109,6 @@ bool PrimeMiner::Initialize(CUcontext context, CUdevice device, CUmodule module)
   return true;
 }
 
-void PrimeMiner::InvokeMining(void *args, void *ctx, void *pipe) {
-	
-	((PrimeMiner*)args)->Mining(ctx, pipe);
-	
-}
-
 void PrimeMiner::FermatInit(pipeline_t &fermat, unsigned mfs)
 {
   fermat.current = 0;
@@ -222,15 +216,10 @@ void PrimeMiner::FermatDispatch(pipeline_t &fermat,
   }
 }
 
-void PrimeMiner::Mining(void *ctx, void *pipe) {
+void PrimeMiner::Mining() {
   cuCtxSetCurrent(_context);
   time_t starttime = time(0);
-	void* blocksub;
-	void* worksub;
-	void* statspush ;
-	void* sharepush ;  
 
-	
 	stats_t stats;
 	stats.id = mID;
 	stats.errors = 0;
@@ -269,7 +258,7 @@ void PrimeMiner::Mining(void *ctx, void *pipe) {
   CUevent sieveEvent;
   CUDA_SAFE_CALL(cuEventCreate(&sieveEvent, CU_EVENT_BLOCKING_SYNC));
   
-  for (unsigned i = 0; i < maxHashPrimorial - mPrimorial; i++) {
+  for (unsigned i = 0; i < maxHashPrimorial; i++) {
     CUDA_SAFE_CALL(primeBuf[i].init(mConfig.PCOUNT, true));
     CUDA_SAFE_CALL(primeBuf[i].copyToDevice(&gPrimes[mPrimorial+i+1]));
     CUDA_SAFE_CALL(primeBuf2[i].init(mConfig.PCOUNT*2, true));
@@ -278,7 +267,7 @@ void PrimeMiner::Mining(void *ctx, void *pipe) {
     for(unsigned j = 0; j <= mPrimorial+i; j++)
       p *= gPrimes[j];    
     primorial[i] = p;
-  }  
+  }
   
 	{
 		unsigned primorialbits = mpz_sizeinbase(primorial[0].get_mpz_t(), 2);
@@ -295,7 +284,7 @@ void PrimeMiner::Mining(void *ctx, void *pipe) {
   CUDA_SAFE_CALL(hashBuf.init(PW*mConfig.N, false));
 	
 	for(int sieveIdx = 0; sieveIdx < SW; ++sieveIdx) {
-    for(int instIdx = 0; instIdx < 2; ++instIdx){    
+    for(int instIdx = 0; instIdx < 2; ++instIdx){
       for (int pipelineIdx = 0; pipelineIdx < FERMAT_PIPELINES; pipelineIdx++)
         CUDA_SAFE_CALL(sieveBuffers[sieveIdx][pipelineIdx][instIdx].init(MSO, true));
       
@@ -329,12 +318,11 @@ void PrimeMiner::Mining(void *ctx, void *pipe) {
     }
     
     CUDA_SAFE_CALL(current.copyToDevice());
-  }    
+  }
 
 
 	bool run = true;
-	while(run){
-
+	while(run) {
 		{
 			time_t currtime = time(0);
 			time_t elapsed = currtime - time1;
@@ -360,7 +348,7 @@ void PrimeMiner::Mining(void *ctx, void *pipe) {
 			break;
 		
 		// reset if new work
-    bool reset = false;
+    bool reset = true;
 		if(reset){
       hashes.clear();
 			hashmod.count[0] = 0;
@@ -380,59 +368,76 @@ void PrimeMiner::Mining(void *ctx, void *pipe) {
       }
 
 			blockheader.version = block_t::CURRENT_VERSION;
-			//blockheader.hashPrevBlock.SetHex(block.hash());
-			//blockheader.hashMerkleRoot.SetHex(work.merkle());
-			//blockheader.time = work.time() + mID;
-			//blockheader.bits = work.bits();
+			blockheader.hashPrevBlock.SetHex("871e5e84001d96cf9da8b9f93b74a4150f5fc9f86122822b60786476d5585392");
+			blockheader.hashMerkleRoot.SetHex("0114b9b25a384485a756541a1c65f4827148f83547a3eb964fa06ceb950d3cb1");
+			blockheader.time = 1619348903;
+			blockheader.bits = 0x0ad96159;
 			blockheader.nonce = 1;
 			testParams.nBits = blockheader.bits;
 			
 			unsigned target = TargetGetLength(blockheader.bits);
       precalcSHA256(&blockheader, hashmod.midstate._hostData, &precalcData);
-      hashmod.count[0] = 0;
+      hashmod.count[0] = 1;
       CUDA_SAFE_CALL(hashmod.midstate.copyToDevice(mHMFermatStream));
       CUDA_SAFE_CALL(hashmod.count.copyToDevice(mHMFermatStream));
 		}
-		
+
 		// hashmod fetch & dispatch
 		{
-// 			printf("got %d new hashes\n", hashmod.count[0]); fflush(stdout);
-			for(unsigned i = 0; i < hashmod.count[0]; ++i) {
+ 			printf("got %d new hashes\n", hashmod.count[0]);
+      fflush(stdout);
+			for(unsigned i = 0; i < 1; ++i) {
 				hash_t hash;
 				hash.iter = iteration;
 				hash.time = blockheader.time;
 				hash.nonce = hashmod.found[i];
         uint32_t primorialBitField = hashmod.primorialBitField[i];
-        uint32_t primorialIdx = primorialBitField >> 16;
+        uint32_t primorialIdx = 4;
         uint64_t realPrimorial = 1;
         for (unsigned j = 0; j < primorialIdx+1; j++) {
-          if (primorialBitField & (1 << j))
             realPrimorial *= gPrimes[j];
-        }      
-        
-        mpz_class mpzRealPrimorial;        
-        mpz_import(mpzRealPrimorial.get_mpz_t(), 2, -1, 4, 0, 0, &realPrimorial);            
-        primorialIdx = std::max(mPrimorial, primorialIdx) - mPrimorial;
-        mpz_class mpzHashMultiplier = primorial[primorialIdx] / mpzRealPrimorial;
-        unsigned hashMultiplierSize = mpz_sizeinbase(mpzHashMultiplier.get_mpz_t(), 2);      
-        mpz_import(mpzRealPrimorial.get_mpz_t(), 2, -1, 4, 0, 0, &realPrimorial);        
-				
+        }
+        printf("tag1, %lu\n", realPrimorial);
+
+        mpz_class mpzRealPrimorial;
+        printf("to import 1\n");
+        mpz_import(mpzRealPrimorial.get_mpz_t(), 2, -1, 4, 0, 0, &realPrimorial);
+        printf("import 1, (%d,%d), %s\n", mPrimorial, primorialIdx, mpzRealPrimorial.get_str(10).c_str());
+        primorialIdx = 4;
+        printf("to divid %u, [%u]\n", maxHashPrimorial, primorialIdx);
+        mpz_class mpzHashMultiplier = primorial[primorialIdx];
+        printf("after divid %s\n", mpzHashMultiplier.get_str(10).c_str());
+        unsigned hashMultiplierSize = mpz_sizeinbase(mpzHashMultiplier.get_mpz_t(), 2);
+        mpz_import(mpzRealPrimorial.get_mpz_t(), 2, -1, 4, 0, 0, &realPrimorial);
+
 				block_t b = blockheader;
-				b.nonce = hash.nonce;
-				
-				SHA_256 sha;
-				sha.init();
-				sha.update((const unsigned char*)&b, sizeof(b));
-				sha.final((unsigned char*)&hash.hash);
-				sha.init();
-				sha.update((const unsigned char*)&hash.hash, sizeof(uint256));
-				sha.final((unsigned char*)&hash.hash);
-				
-				if(hash.hash < (uint256(1) << 255)){
-          LOG_F(WARNING, "hash does not meet minimum.\n");
-					stats.errors++;
-					continue;
-				}
+        for(unsigned int no = 1; no < 65535; ++no) {
+          b.nonce = hash.nonce = no;
+
+          //printf("before hash\n");
+          SHA_256 sha;
+          sha.init();
+          sha.update((const unsigned char*)&b, sizeof(b));
+          sha.final((unsigned char*)&hash.hash);
+          sha.init();
+          sha.update((const unsigned char*)&hash.hash, sizeof(uint256));
+          sha.final((unsigned char*)&hash.hash);
+          
+          //printf("hash %d\n", hash.hash < (uint256(1) << 255));
+          if(hash.hash < (uint256(1) << 255)){
+            //LOG_F(WARNING, "hash does not meet minimum, %u.\n", no);
+            continue;
+          } else {
+            mpz_class mpzHash;
+				    mpz_set_uint256(mpzHash.get_mpz_t(), hash.hash);
+            if(!mpz_divisible_p(mpzHash.get_mpz_t(), mpzRealPrimorial.get_mpz_t())){
+              //LOG_F(WARNING, "mpz_divisible_ui_p failed %d.\n", no);
+				      continue;
+				    } else {
+              break;
+            }
+          }
+        }
 				
 				mpz_class mpzHash;
 				mpz_set_uint256(mpzHash.get_mpz_t(), hash.hash);
@@ -440,7 +445,9 @@ void PrimeMiner::Mining(void *ctx, void *pipe) {
           LOG_F(WARNING, "mpz_divisible_ui_p failed.\n");
 					stats.errors++;
 					continue;
-				}
+				} else {
+          printf("%s mod %s succeed\n", mpzHash.get_str(10).c_str(), mpzRealPrimorial.get_str(10).c_str());
+        }
 				
 				hash.primorialIdx = primorialIdx;
         hash.primorial = mpzHashMultiplier;
@@ -588,7 +595,7 @@ void PrimeMiner::Mining(void *ctx, void *pipe) {
 		int numcandis = final.count[0];
 		numcandis = std::min(numcandis, (int)final.info._size);
 		numcandis = std::max(numcandis, 0);
-//  		printf("got %d new candis\n", numcandis);
+    printf("got %d new candis\n", numcandis);
 		candis.resize(numcandis);
 		primeCount += numcandis;
 		if(numcandis)
@@ -603,9 +610,9 @@ void PrimeMiner::Mining(void *ctx, void *pipe) {
     // syncronize our stream one time per iteration
     // sieve stream is first because it much bigger
     CUDA_SAFE_CALL(cuEventSynchronize(sieveEvent)); 
-#ifdef __WINDOWS__  
+    #ifdef __WINDOWS__  
     CUDA_SAFE_CALL(cuCtxSynchronize());
-#endif
+    #endif
     for (unsigned i = 0; i < mSievePerRound; i++)
       CUDA_SAFE_CALL(candidatesCountBuffers[i][widx].copyToHost(mSieveStream));
     
@@ -631,7 +638,7 @@ void PrimeMiner::Mining(void *ctx, void *pipe) {
 		
 		// check candis
 		if(candis.size()){
-// 			printf("checking %d candis\n", (int)candis.size());
+  		printf("checking %d candis\n", (int)candis.size());
 			mpz_class chainorg;
 			mpz_class multi;
 			for(unsigned i = 0; i < candis.size(); ++i){
@@ -661,6 +668,7 @@ void PrimeMiner::Mining(void *ctx, void *pipe) {
 			break;
 		
 		iteration++;
+    break;
 	}
 	
   LOG_F(INFO, "GPU %d stopped.", mID);
@@ -775,17 +783,16 @@ int main() {
   int depth = 5 - 1;
 	depth = std::max(depth, 2);
 	depth = std::min(depth, 5);
-  for (unsigned i = 0; i < gpus.size(); i++) {
+  for (unsigned i = 0; i < 0; i++) {
     cudaRunBenchmarks(gpus[i].context, gpus[i].device, modules[i], depth, clKernelLSize);
   }
 
-      std::vector<PrimeMiner*> mWorkers;
-      unsigned int sievePerRound = 5;
-      for(unsigned i = 0; i < gpus.size(); ++i) {
+  unsigned int sievePerRound = 5;
+  for(unsigned i = 0; i < gpus.size(); ++i) {
       PrimeMiner* miner = new PrimeMiner(i, gpus.size(), sievePerRound, depth, clKernelLSize);
       miner->Initialize(gpus[i].context, gpus[i].device, modules[i]);
-      mWorkers.push_back(miner);
-    }
+      miner->Mining();
+  }
 
   return 0;
 }

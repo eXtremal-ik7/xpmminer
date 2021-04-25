@@ -12,6 +12,9 @@ include(TestBigEndian)
 include(CheckTypeSize)
 
 option(DEBUG_MINING_AMD_OPENCL "Print performance counters")
+option(BUILDCPUMINER "build CPU miner" ON)
+option(BUILDOPENCLMINER "build OpenCL miner" ON)
+option(BUILDCUDAMINER "build CUDA miner" ON)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
 
@@ -58,5 +61,12 @@ include_directories(
 
 add_subdirectory(blkmaker)
 add_subdirectory(common)
-add_subdirectory(CPU)
-add_subdirectory(OpenCL)
+IF (BUILDCPUMINER)
+  add_subdirectory(CPU)
+ENDIF()
+IF (BUILDOPENCLMINER)
+  add_subdirectory(OpenCL)
+ENDIF()
+IF (BUILDCUDAMINER)
+  add_subdirectory(Cuda)
+ENDIF()

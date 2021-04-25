@@ -186,10 +186,10 @@ public:
 	
   bool Initialize(CUcontext context, CUdevice device, CUmodule module);
 	
-	static void InvokeMining(void *args, void *ctx, void *pipe);
   config_t getConfig() { return mConfig; }
 	
 	bool MakeExit;
+	void Mining();
 	
 private:
   void FermatInit(pipeline_t &fermat, unsigned mfs);  
@@ -205,7 +205,6 @@ private:
                       CUfunction fermatKernel,
                       unsigned sievePerRound);  
   
-	void Mining(void *ctx, void *pipe);
 	
 	unsigned mID;
 	unsigned mThreads;
