@@ -11,7 +11,7 @@
 
 #include <gmp.h>
 #include <gmpxx.h>
-
+#include "getblocktemplate.h"
 #include "cudautil.h"
 #include "uint256.h"
 #include "sha256.h"
@@ -189,7 +189,7 @@ public:
   config_t getConfig() { return mConfig; }
 	
 	bool MakeExit;
-	void Mining();
+	void Mining(GetBlockTemplateContext* gbp, SubmitContext* submit);
 	
 private:
   void FermatInit(pipeline_t &fermat, unsigned mfs);  

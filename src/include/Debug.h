@@ -11,7 +11,7 @@ static void dbgPrint(const char *fmt, ...)
 #ifndef NDEBUG
   va_list arguments;
   va_start(arguments, fmt);
-  vfprintf(stderr, fmt, arguments);
+  fprintf(stderr, fmt, arguments);
 #endif
 }
 
@@ -27,9 +27,9 @@ static void logFormattedWrite(void *log, const char *fmt, ...)
         
   va_list arguments;
   va_start(arguments, fmt);
-  wprintw((WINDOW*)log, "%s: ", buffer);
-  vwprintw((WINDOW*)log, fmt, arguments);
-  wprintw((WINDOW*)log, "\n");
+  printf("%s: ", buffer);
+  printf(fmt, arguments);
+  printf("\n");
 }
 
 #endif //__DEBUG_H_

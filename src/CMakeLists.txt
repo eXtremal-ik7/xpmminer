@@ -1,20 +1,21 @@
 cmake_minimum_required(VERSION 2.8)
 
+option(DEBUG_MINING_AMD_OPENCL "Print performance counters")
+option(BUILDCPUMINER "build CPU miner" ON)
+option(BUILDOPENCLMINER "build OpenCL miner" ON)
+option(BUILDCUDAMINER "build CUDA miner" ON)
+
 set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
   ${CMAKE_SOURCE_DIR}/cmake
 )
 
 find_package(OpenSSL REQUIRED)
-
-include(FindOpenCL)
+IF (BUILDOPENCLMINER)
+  include(FindOpenCL)
+endif()
 include(FindDependencies)
 include(TestBigEndian)
 include(CheckTypeSize)
-
-option(DEBUG_MINING_AMD_OPENCL "Print performance counters")
-option(BUILDCPUMINER "build CPU miner" ON)
-option(BUILDOPENCLMINER "build OpenCL miner" ON)
-option(BUILDCUDAMINER "build CUDA miner" ON)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
 

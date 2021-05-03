@@ -53,7 +53,7 @@ static const mpz_class mpzTwo = 2;
 // Check Fermat probable primality test (2-PRP): 2 ** (n-1) = 1 (mod n)
 // true: n is probable prime
 // false: n is composite; set fractional length in the nLength output
-static bool FermatProbablePrimalityTestFast(const mpz_class& n, unsigned int& nLength, CPrimalityTestParams& testParams, bool fFastFail = false)
+static bool FermatProbablePrimalityTestFast(const mpz_class& n, unsigned int& nLength, CPrimalityTestParamsCuda& testParams, bool fFastFail = false)
 {
     mpz_class& mpzNMinusOne = testParams.mpzNMinusOne;
     mpz_class& mpzE = testParams.mpzE;
@@ -96,7 +96,7 @@ static bool FermatProbablePrimalityTestFast(const mpz_class& n, unsigned int& nL
 // Return values
 // true: n is probable prime
 // false: n is composite; set fractional length in the nLength output
-static bool EulerLagrangeLifchitzPrimalityTestFast(const mpz_class& n, bool fSophieGermain, unsigned int& nLength, CPrimalityTestParams& testParams, bool fFastFail = false)
+static bool EulerLagrangeLifchitzPrimalityTestFast(const mpz_class& n, bool fSophieGermain, unsigned int& nLength, CPrimalityTestParamsCuda& testParams, bool fFastFail = false)
 {
     mpz_class& mpzNMinusOne = testParams.mpzNMinusOne;
     mpz_class& mpzE = testParams.mpzE;
@@ -150,7 +150,7 @@ static bool EulerLagrangeLifchitzPrimalityTestFast(const mpz_class& n, bool fSop
 // fSophieGermain:
 // true - Test for Cunningham Chain of first kind (n, 2n+1, 4n+3, ...)
 // false - Test for Cunningham Chain of second kind (n, 2n-1, 4n-3, ...)
-static void ProbableCunninghamChainTestFast(const mpz_class& n, bool fSophieGermain, unsigned int& nProbableChainLength, CPrimalityTestParams& testParams, int base)
+static void ProbableCunninghamChainTestFast(const mpz_class& n, bool fSophieGermain, unsigned int& nProbableChainLength, CPrimalityTestParamsCuda& testParams, int base)
 {
     nProbableChainLength = base << nFractionalBits;
     mpz_class &N = testParams.mpzN;
@@ -181,7 +181,7 @@ static void ProbableCunninghamChainTestFast(const mpz_class& n, bool fSophieGerm
 // Test Probable BiTwin Chain for: mpzOrigin
 // Test the numbers in the optimal order for any given chain length
 // Gives the correct length of a BiTwin chain even for short chains
-static void ProbableBiTwinChainTestFast(const mpz_class& mpzOrigin, unsigned int& nProbableChainLength, CPrimalityTestParams& testParams, int base)
+static void ProbableBiTwinChainTestFast(const mpz_class& mpzOrigin, unsigned int& nProbableChainLength, CPrimalityTestParamsCuda& testParams, int base)
 {
   mpz_class& mpzOriginMinusOne = testParams.mpzOriginMinusOne;
   mpz_class& mpzOriginPlusOne = testParams.mpzOriginPlusOne;
@@ -229,7 +229,7 @@ static void ProbableBiTwinChainTestFast(const mpz_class& mpzOrigin, unsigned int
   }
 }
 
-bool ProbablePrimeChainTestFast(const mpz_class& mpzPrimeChainOrigin, CPrimalityTestParams& testParams, int base)
+bool ProbablePrimeChainTestFastCuda(const mpz_class& mpzPrimeChainOrigin, CPrimalityTestParamsCuda& testParams, int base)
 {
   const unsigned int nBits = testParams.nBits;
   const unsigned int nCandidateType = testParams.nCandidateType;

@@ -8,9 +8,9 @@
 
 
 #include "xpmclient.h"
-#include "prime.h"
+#include "primecoin.h"
 #include "benchmarks.h"
-
+#include <getopt.h>
 #include <fstream>
 #include <set>
 #include <memory>
@@ -18,9 +18,38 @@
 #if defined(__GXX_EXPERIMENTAL_CXX0X__) && (__cplusplus < 201103L)
 #define steady_clock monotonic_clock
 #endif  
-
+#include "getblocktemplate.h"
 #include <math.h>
 #include <map>
+#include "prime.h"
+#include <openssl/bn.h>
+#include <openssl/sha.h>
+
+void _blkmk_bin2hex(char *out, void *data, size_t datasz) {
+	unsigned char *datac = (unsigned char *)data;
+	static char hex[] = "0123456789abcdef";
+	out[datasz * 2] = '\0';
+	for (size_t i = 0; i < datasz; ++i)
+	{
+    int j = datasz -1 - i;
+		out[ j*2   ] = hex[datac[i] >> 4];
+		out[(j*2)+1] = hex[datac[i] & 15];
+	}
+
+}
+
+unsigned gDebug = 0;
+int gExtensionsNum = 9;
+int gPrimorial = 19;
+int gSieveSize = 10;
+int gWeaveDepth = 8192;
+int gThreadsNum = 1;
+int extraNonce = 0;
+
+static const char *gWallet = 0;
+static const char *gUrl = "127.0.0.1:9912";
+static const char *gUserName = 0;
+static const char *gPassword = 0;
 
 std::vector<unsigned> gPrimes2;
 
@@ -216,9 +245,12 @@ void PrimeMiner::FermatDispatch(pipeline_t &fermat,
   }
 }
 
-void PrimeMiner::Mining() {
+void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
   cuCtxSetCurrent(_context);
   time_t starttime = time(0);
+  unsigned int dataId;
+  bool hasChanged;
+  blktemplate_t *workTemplate = 0;
 
 	stats_t stats;
 	stats.id = mID;
@@ -248,7 +280,7 @@ void PrimeMiner::Mining() {
   cudaBuffer<uint32_t> candidatesCountBuffers[SW][2];
   pipeline_t fermat320;
   pipeline_t fermat352;
-	CPrimalityTestParams testParams;
+	CPrimalityTestParamsCuda testParams;
 	std::vector<fermat_t> candis;
   unsigned numHashCoeff = 32768;
 
@@ -258,7 +290,7 @@ void PrimeMiner::Mining() {
   CUevent sieveEvent;
   CUDA_SAFE_CALL(cuEventCreate(&sieveEvent, CU_EVENT_BLOCKING_SYNC));
   
-  for (unsigned i = 0; i < maxHashPrimorial; i++) {
+  for (unsigned i = 0; i < maxHashPrimorial - mPrimorial; i++) {
     CUDA_SAFE_CALL(primeBuf[i].init(mConfig.PCOUNT, true));
     CUDA_SAFE_CALL(primeBuf[i].copyToDevice(&gPrimes[mPrimorial+i+1]));
     CUDA_SAFE_CALL(primeBuf2[i].init(mConfig.PCOUNT*2, true));
@@ -321,6 +353,7 @@ void PrimeMiner::Mining() {
   }
 
 
+        int loadworkaccount = 0;
 	bool run = true;
 	while(run) {
 		{
@@ -343,12 +376,18 @@ void PrimeMiner::Mining() {
 		stats.cpd = 24.*3600. * double(stats.fps) * pow(stats.primeprob, mConfig.TARGET);
 		
 		// get work
-
+		bool reset = false;
+		{
+      workTemplate = gbp->get(0, workTemplate, &dataId, &hasChanged);
+			if(workTemplate && hasChanged){
+        run = true;//ReceivePub(work, worksub);
+				reset = true;
+			}
+		}
 		if(!run)
 			break;
 		
 		// reset if new work
-    bool reset = true;
 		if(reset){
       hashes.clear();
 			hashmod.count[0] = 0;
@@ -367,17 +406,21 @@ void PrimeMiner::Mining() {
         }
       }
 
-			blockheader.version = block_t::CURRENT_VERSION;
-			blockheader.hashPrevBlock.SetHex("871e5e84001d96cf9da8b9f93b74a4150f5fc9f86122822b60786476d5585392");
-			blockheader.hashMerkleRoot.SetHex("0114b9b25a384485a756541a1c65f4827148f83547a3eb964fa06ceb950d3cb1");
-			blockheader.time = 1619348903;
-			blockheader.bits = 0x0ad96159;
-			blockheader.nonce = 1;
+      printf("version is %u\n", workTemplate->version);
+      blockheader.version = workTemplate->version;
+      char blkhex[128];
+      _blkmk_bin2hex(blkhex, workTemplate->prevblk, 32);
+      blockheader.hashPrevBlock.SetHex(blkhex);
+      _blkmk_bin2hex(blkhex, workTemplate->_mrklroot, 32);
+      blockheader.hashMerkleRoot.SetHex(blkhex);
+      blockheader.time = workTemplate->curtime;
+      blockheader.bits = *(uint32_t*)workTemplate->diffbits;
+      blockheader.nonce = 1;
 			testParams.nBits = blockheader.bits;
 			
 			unsigned target = TargetGetLength(blockheader.bits);
       precalcSHA256(&blockheader, hashmod.midstate._hostData, &precalcData);
-      hashmod.count[0] = 1;
+      hashmod.count[0] = 0;
       CUDA_SAFE_CALL(hashmod.midstate.copyToDevice(mHMFermatStream));
       CUDA_SAFE_CALL(hashmod.count.copyToDevice(mHMFermatStream));
 		}
@@ -386,33 +429,28 @@ void PrimeMiner::Mining() {
 		{
  			printf("got %d new hashes\n", hashmod.count[0]);
       fflush(stdout);
-			for(unsigned i = 0; i < 1; ++i) {
+			for(unsigned i = 0; i < hashmod.count[0]; ++i) {
 				hash_t hash;
 				hash.iter = iteration;
 				hash.time = blockheader.time;
 				hash.nonce = hashmod.found[i];
         uint32_t primorialBitField = hashmod.primorialBitField[i];
-        uint32_t primorialIdx = 4;
+        uint32_t primorialIdx = primorialBitField >> 16;
         uint64_t realPrimorial = 1;
         for (unsigned j = 0; j < primorialIdx+1; j++) {
+          if (primorialBitField & (1 << j))
             realPrimorial *= gPrimes[j];
         }
-        printf("tag1, %lu\n", realPrimorial);
 
         mpz_class mpzRealPrimorial;
-        printf("to import 1\n");
         mpz_import(mpzRealPrimorial.get_mpz_t(), 2, -1, 4, 0, 0, &realPrimorial);
-        printf("import 1, (%d,%d), %s\n", mPrimorial, primorialIdx, mpzRealPrimorial.get_str(10).c_str());
-        primorialIdx = 4;
-        printf("to divid %u, [%u]\n", maxHashPrimorial, primorialIdx);
-        mpz_class mpzHashMultiplier = primorial[primorialIdx];
-        printf("after divid %s\n", mpzHashMultiplier.get_str(10).c_str());
+        primorialIdx = std::max(mPrimorial, primorialIdx) - mPrimorial;
+        mpz_class mpzHashMultiplier = primorial[primorialIdx] / mpzRealPrimorial;
         unsigned hashMultiplierSize = mpz_sizeinbase(mpzHashMultiplier.get_mpz_t(), 2);
         mpz_import(mpzRealPrimorial.get_mpz_t(), 2, -1, 4, 0, 0, &realPrimorial);
 
 				block_t b = blockheader;
-        for(unsigned int no = 1; no < 65535; ++no) {
-          b.nonce = hash.nonce = no;
+          b.nonce = hash.nonce;
 
           //printf("before hash\n");
           SHA_256 sha;
@@ -424,20 +462,11 @@ void PrimeMiner::Mining() {
           sha.final((unsigned char*)&hash.hash);
           
           //printf("hash %d\n", hash.hash < (uint256(1) << 255));
-          if(hash.hash < (uint256(1) << 255)){
-            //LOG_F(WARNING, "hash does not meet minimum, %u.\n", no);
-            continue;
-          } else {
-            mpz_class mpzHash;
-				    mpz_set_uint256(mpzHash.get_mpz_t(), hash.hash);
-            if(!mpz_divisible_p(mpzHash.get_mpz_t(), mpzRealPrimorial.get_mpz_t())){
-              //LOG_F(WARNING, "mpz_divisible_ui_p failed %d.\n", no);
-				      continue;
-				    } else {
-              break;
-            }
-          }
-        }
+				if(hash.hash < (uint256(1) << 255)){
+          LOG_F(WARNING, "hash does not meet minimum.\n");
+					stats.errors++;
+					continue;
+				}
 				
 				mpz_class mpzHash;
 				mpz_set_uint256(mpzHash.get_mpz_t(), hash.hash);
@@ -445,9 +474,7 @@ void PrimeMiner::Mining() {
           LOG_F(WARNING, "mpz_divisible_ui_p failed.\n");
 					stats.errors++;
 					continue;
-				} else {
-          printf("%s mod %s succeed\n", mpzHash.get_str(10).c_str(), mpzRealPrimorial.get_str(10).c_str());
-        }
+				}
 				
 				hash.primorialIdx = primorialIdx;
         hash.primorial = mpzHashMultiplier;
@@ -457,16 +484,16 @@ void PrimeMiner::Mining() {
         memset(&hashBuf[hid*mConfig.N], 0, sizeof(uint32_t)*mConfig.N);
         mpz_export(&hashBuf[hid*mConfig.N], 0, -1, 4, 0, 0, hashes.get(hid).shash.get_mpz_t());        
 			}
-			
+
 			if (hashmod.count[0])
         CUDA_SAFE_CALL(hashBuf.copyToDevice(mSieveStream));
-			
-			//printf("hashlist.size() = %d\n", (int)hashlist.size());
+
 			hashmod.count[0] = 0;
 			
       int numhash = ((int)(16*mSievePerRound) - (int)hashes.remaining()) * numHashCoeff;
 
-			if(numhash > 0){
+			printf("numhash is %d, mLSize %u\n", numhash, mLSize);
+      if(numhash > 0){
         numhash += mLSize - numhash % mLSize;
 				if(blockheader.nonce > (1u << 31)){
 					blockheader.time += mThreads;
@@ -510,7 +537,6 @@ void PrimeMiner::Mining() {
 		int widx = ridx xor 1;
 		
 		// sieve dispatch    
-    reset = false;
       for (unsigned i = 0; i < mSievePerRound; i++) {
         if(hashes.empty()){
           if (!reset) {
@@ -566,8 +592,8 @@ void PrimeMiner::Mining() {
                                         mLSize, 1, 1,
                                         0, mSieveStream, arguments, 0));          
           
-        }         
-         
+        }
+
 				{
           uint32_t multiplierSize = mpz_sizeinbase(hashes.get(hid).shash.get_mpz_t(), 2);
           void *arguments[] = {
@@ -653,14 +679,57 @@ void PrimeMiner::Mining() {
 				multi = candi.index;
 				multi <<= candi.origin;
 				chainorg = hash.shash;
+        printf("origin = %s\n", chainorg.get_str(10).c_str());
 				chainorg *= multi;
 				
 				testParams.nCandidateType = candi.type;
-        bool isblock = ProbablePrimeChainTestFast(chainorg, testParams, mDepth);
+        bool isblock = ProbablePrimeChainTestFastCuda(chainorg, testParams, mDepth);
 				unsigned chainlength = TargetGetLength(testParams.nChainLength);
 
 				/*printf("candi %d: hashid=%d index=%d origin=%d type=%d length=%d\n",
 						i, candi.hashid, candi.index, candi.origin, candi.type, chainlength);*/
+				if(chainlength >= TargetGetLength(blockheader.bits)){
+          printf("candis[%d] = %s, chainlength %u\n", i, chainorg.get_str(10).c_str(), chainlength);
+					PrimecoinBlockHeader work;
+          work.version = blockheader.version;
+          char blkhex[128];
+          _blkmk_bin2hex(blkhex, workTemplate->prevblk, 32);
+          memcpy(work.hashPrevBlock, workTemplate->prevblk, 32);
+          memcpy(work.hashMerkleRoot, workTemplate->_mrklroot, 32);
+          work.time = hash.time;
+          work.bits = blockheader.bits;
+          work.nonce = hash.nonce;
+          uint8_t buffer[256];
+          BIGNUM *xxx = 0;
+          mpz_class targetMultiplier = hash.primorial * multi;
+          BN_dec2bn(&xxx, targetMultiplier.get_str().c_str());
+          BN_bn2mpi(xxx, buffer);
+          work.multiplier[0] = buffer[3];
+          std::reverse_copy(buffer+4, buffer+4+buffer[3], work.multiplier+1);
+          submit->submitBlock(workTemplate, work, dataId);
+					
+          LOG_F(1, "GPU %d found share: %d-ch type %d", mID, chainlength, candi.type+1);
+					if(isblock)
+            LOG_F(1, "GPU %d found BLOCK!", mID);
+					
+				}else if(chainlength < mDepth){
+          LOG_F(WARNING, "ProbablePrimeChainTestFast %ubits %d/%d", (unsigned)mpz_sizeinbase(chainorg.get_mpz_t(), 2), chainlength, mDepth);
+          LOG_F(WARNING, "origin: %s", chainorg.get_str().c_str());
+          LOG_F(WARNING, "type: %u", (unsigned)candi.type);
+          LOG_F(WARNING, "multiplier: %u", (unsigned)candi.index);
+          LOG_F(WARNING, "layer: %u", (unsigned)candi.origin);
+          LOG_F(WARNING, "hash primorial: %s", hash.primorial.get_str().c_str());
+          LOG_F(WARNING, "primorial multipliers: ");
+          for (unsigned i = 0; i < mPrimorial;) {
+            if (hash.primorial % gPrimes[i] == 0) {
+              hash.primorial /= gPrimes[i];
+              LOG_F(WARNING, " * [%u]%u", i+1, gPrimes[i]);
+            } else {
+              i++;
+            }
+          }
+					stats.errors++;
+				}
 			}
 		}
 
@@ -668,7 +737,6 @@ void PrimeMiner::Mining() {
 			break;
 		
 		iteration++;
-    break;
 	}
 	
   LOG_F(INFO, "GPU %d stopped.", mID);
@@ -697,7 +765,146 @@ void dumpSieveConstants(unsigned weaveDepth,
   file << "#define SIEVERANGE3 " << ranges[2] << "\n";
 }
 
-int main() {
+
+
+enum CmdLineOptions {
+  clDebug = 0,
+  clThreadsNum,
+  clBenchmark,
+  clExtensionsNum,
+  clPrimorial,
+  clSieveSize,
+  clWeaveDepth,
+  clUrl,
+  clUser,
+  clPass,
+  clWallet,
+  clWorkerId,
+  clHelp,
+  clOptionLast,
+  clOptionsNum
+};
+
+void printHelpMessage() 
+{
+  printf("Opensource primecoin CPU miner, usage:\n");
+  printf("  xpmclminer <arguments>\n\n");
+  printf("  -h or --help: show this help message\n");
+  printf("  -b or --benchmark: run benchmark and exit\n");
+  printf("  -o or --url <HostAddress:port>: address of primecoin RPC client, default: %s\n", gUrl);
+  printf("  -u or --user <UserName>: user name for primecoin RPC client\n");
+  printf("  -p or --pass <Password>: password for primecoin RPC client\n");
+  printf("  -w or --wallet: wallet address for coin receiving\n");
+  printf("  --debug: show additional mining information\n");
+  printf("  --extensions-num <number>: Eratosthenes sieve extensions number (default: %u)\n", gExtensionsNum);
+  printf("  --primorial <number>: primorial number (default: %u)\n", gPrimorial);
+  printf("  --sieve-size <number>: Eratosthenes sieve size (default: %u)\n", gSieveSize);
+  printf("  --weave-depth <number>: Eratosthenes sieve weave depth (default: %u)\n", gWeaveDepth);
+  printf("  --worker-id: unique identifier of your worker, used in block creation. ");
+  printf("All your rigs must have different worker IDs! (default: current time value)\n");
+}
+
+void initCmdLineOptions(option *options)
+{
+  options[clDebug] = {"debug", no_argument, 0, 0};
+  options[clThreadsNum] = {"threads", required_argument, &gThreadsNum, 0};
+  options[clBenchmark] = {"benchmark", no_argument, 0, 'b'};
+  options[clExtensionsNum] = {"extensions-num", required_argument, &gExtensionsNum, 0};  
+  options[clPrimorial] = {"primorial", required_argument, &gPrimorial, 0};
+  options[clSieveSize] = {"sieve-size", required_argument, &gSieveSize, 0};
+  options[clWeaveDepth] = {"weave-depth", required_argument, &gWeaveDepth, 0};
+  options[clUrl] = {"url", required_argument, 0, 'o'};
+  options[clUser] = {"user", required_argument, 0, 'u'};
+  options[clPass] = {"pass", required_argument, 0, 'p'};
+  options[clWallet] = {"wallet", required_argument, 0, 'w'};
+  options[clWorkerId] = {"worker-id", required_argument, &extraNonce, 0};  
+  options[clHelp] = {"help", no_argument, 0, 'h'};
+  options[clOptionLast] = {0, 0, 0, 0};
+}
+
+int main(int argc, char **argv) {
+  srand(time(0));  
+  blkmk_sha256_impl = sha256;
+  PrimeSource primeSource(10000000, gWeaveDepth+256);
+  option gOptions[clOptionsNum];
+  bool isBenchmark = false;
+  int index = 0, c;
+  initCmdLineOptions(gOptions);
+  const char *platform = "NVIDIA CUDA";
+  while ((c = getopt_long(argc, argv, "bo:u:p:w:h", gOptions, &index)) != -1) {
+    switch (c) {
+      case 0 :
+        switch (index) {
+          case clDebug :
+            gDebug = 1;
+            break;
+          case clExtensionsNum :
+            gExtensionsNum = atoi(optarg);
+            break;
+          case clPrimorial :
+            gPrimorial = atoi(optarg);
+            break;
+          case clThreadsNum :
+            gThreadsNum = atoi(optarg);
+            break;
+          case clWorkerId :
+            extraNonce = atoi(optarg);
+            break;            
+        }
+        break;
+          case 'b' :
+            isBenchmark = true;
+            break;
+          case 'o' :
+            gUrl = optarg;
+            break;
+          case 'u' :
+            gUserName = optarg;
+            break;
+          case 'p' :
+            gPassword = optarg;
+            break;
+          case 'w' :
+            gWallet = optarg;
+            break;
+          case 'h' :
+            printHelpMessage();
+            exit(0);
+          case ':' :
+            fprintf(stderr, "Error: option %s missing argument\n",
+                    gOptions[index].name);
+            break;
+          case '?' :
+            fprintf(stderr, "Error: invalid option %s\n", argv[optind-1]);
+            break;
+          default :
+            break;
+    }
+  }
+  
+  if ((!gUserName || !gPassword) && !isBenchmark) {
+    fprintf(stderr, "Error: you must specify user name and password\n");
+    exit(1);
+  }
+  
+  if (!gWallet && !isBenchmark) {
+    fprintf(stderr, "Error: you must specify wallet\n");
+    exit(1);
+  }
+  printf("block sum is %d\n", gThreadsNum);
+  GetBlockTemplateContext* getblock = new GetBlockTemplateContext(0, gUrl, gUserName, gPassword, gWallet, 4, gThreadsNum, extraNonce);
+  getblock->run();
+  blktemplate_t *workTemplate = 0;
+  unsigned int dataId;
+  bool hasChanged;
+  //while(!(workTemplate = getblock->get(0, workTemplate, &dataId, &hasChanged) ) ) {
+  //  printf("blocktemplate %ld\n", (long int)workTemplate);
+  //  usleep(500);
+  //}
+  //printf("blocktemplate_rwrqwrqw %ld\n", (long int)workTemplate);
+  //printf("block height %d\n", workTemplate->height);
+  
+  SubmitContext *submit = new SubmitContext(0, gUrl, gUserName, gPassword);
 
   {
 		int np = sizeof(gPrimes)/sizeof(unsigned);
@@ -791,7 +998,7 @@ int main() {
   for(unsigned i = 0; i < gpus.size(); ++i) {
       PrimeMiner* miner = new PrimeMiner(i, gpus.size(), sievePerRound, depth, clKernelLSize);
       miner->Initialize(gpus[i].context, gpus[i].device, modules[i]);
-      miner->Mining();
+      miner->Mining(getblock, submit);
   }
 
   return 0;

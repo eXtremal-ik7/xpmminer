@@ -21,15 +21,8 @@ extern unsigned int nTargetInitialLength;
 extern unsigned int nTargetMinLength;
 
 
-enum // prime chain type
-{
-    PRIME_CHAIN_CUNNINGHAM1 = 1u,
-    PRIME_CHAIN_CUNNINGHAM2 = 2u,
-    PRIME_CHAIN_BI_TWIN = 3u,
-};
 
-
-class CPrimalityTestParams
+class CPrimalityTestParamsCuda
 {
 public:
     // GMP C++ variables
@@ -52,7 +45,7 @@ public:
     // Results
     unsigned int nChainLength;
 
-    CPrimalityTestParams()
+    CPrimalityTestParamsCuda()
     {
         nBits = 0;
         nCandidateType = 0;
@@ -71,7 +64,7 @@ inline void mpz_set_uint256(mpz_t r, uint256& u)
     mpz_import(r, 32 / sizeof(unsigned long), -1, sizeof(unsigned long), -1, 0, &u);
 }
 
-bool ProbablePrimeChainTestFast(const mpz_class& mpzPrimeChainOrigin, CPrimalityTestParams& testParams, int base);
+bool ProbablePrimeChainTestFastCuda(const mpz_class& mpzPrimeChainOrigin, CPrimalityTestParamsCuda& testParams, int base);
 
 
 
