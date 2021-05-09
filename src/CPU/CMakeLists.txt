@@ -19,11 +19,10 @@ target_link_libraries(xpmcpuminer
   ${OPENSSL_SSL_LIBRARY}
   ${CURL_LIBRARY}
   ${JANSSON_LIBRARY}
-  ${NCURSES_LIBRARY}
 )
 
 if (OS_LINUX)
-  target_link_libraries(xpmcpuminer pthread)
+  target_link_libraries(xpmcpuminer pthread dl)
 elseif (OS_WINDOWS)
   set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++ -static")
   target_link_libraries(xpmcpuminer

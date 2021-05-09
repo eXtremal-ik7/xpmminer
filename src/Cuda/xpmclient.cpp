@@ -26,15 +26,15 @@
 #include <openssl/sha.h>
 
 void _blkmk_bin2hex(char *out, void *data, size_t datasz) {
-	unsigned char *datac = (unsigned char *)data;
-	static char hex[] = "0123456789abcdef";
-	out[datasz * 2] = '\0';
-	for (size_t i = 0; i < datasz; ++i)
-	{
+  unsigned char *datac = (unsigned char *)data;
+  static char hex[] = "0123456789abcdef";
+  out[datasz * 2] = '\0';
+  for (size_t i = 0; i < datasz; ++i)
+  {
     int j = datasz -1 - i;
-		out[ j*2   ] = hex[datac[i] >> 4];
-		out[(j*2)+1] = hex[datac[i] & 15];
-	}
+    out[ j*2   ] = hex[datac[i] >> 4];
+    out[(j*2)+1] = hex[datac[i] & 15];
+  }
 
 }
 
@@ -59,31 +59,31 @@ double GetPrimeDifficulty(unsigned int nBits)
 }
 
 PrimeMiner::PrimeMiner(unsigned id, unsigned threads, unsigned sievePerRound, unsigned depth, unsigned LSize) {
-	
-	mID = id;
-	mThreads = threads;
+  
+  mID = id;
+  mThreads = threads;
 
   mSievePerRound = sievePerRound;
-	mDepth = depth;
+  mDepth = depth;
   mLSize = LSize;  
-	
-	mBlockSize = 0;
-	mConfig = {0};
+  
+  mBlockSize = 0;
+  mConfig = {0};
 
   _context = 0;
- 	mHMFermatStream = 0;
- 	mSieveStream = 0;
-	mHashMod = 0;
-	mSieveSetup = 0;
-	mSieve = 0;
-	mSieveSearch = 0;
-	mFermatSetup = 0;
-	mFermatKernel352 = 0;
+   mHMFermatStream = 0;
+   mSieveStream = 0;
+  mHashMod = 0;
+  mSieveSetup = 0;
+  mSieve = 0;
+  mSieveSearch = 0;
+  mFermatSetup = 0;
+  mFermatKernel352 = 0;
   mFermatKernel320 = 0;  
-	mFermatCheck = 0;  
-	
-	MakeExit = false;
-	
+  mFermatCheck = 0;  
+  
+  MakeExit = false;
+  
 }
 
 PrimeMiner::~PrimeMiner() {
@@ -252,36 +252,36 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
   bool hasChanged;
   blktemplate_t *workTemplate = 0;
 
-	stats_t stats;
-	stats.id = mID;
-	stats.errors = 0;
-	stats.fps = 0;
-	stats.primeprob = 0;
-	stats.cpd = 0;
-	
-	const unsigned mPrimorial = 13;
-	uint64_t fermatCount = 1;
-	uint64_t primeCount = 1;
-	
-	time_t time1 = time(0);
-	time_t time2 = time(0);
-	uint64_t testCount = 0;
+  stats_t stats;
+  stats.id = mID;
+  stats.errors = 0;
+  stats.fps = 0;
+  stats.primeprob = 0;
+  stats.cpd = 0;
+  
+  const unsigned mPrimorial = 13;
+  uint64_t fermatCount = 1;
+  uint64_t primeCount = 1;
+  
+  time_t time1 = time(0);
+  time_t time2 = time(0);
+  uint64_t testCount = 0;
 
-	unsigned iteration = 0;
-	mpz_class primorial[maxHashPrimorial];
-	block_t blockheader;
+  unsigned iteration = 0;
+  mpz_class primorial[maxHashPrimorial];
+  block_t blockheader;
   search_t hashmod;
   sha256precalcData precalcData;
 
   lifoBuffer<hash_t> hashes(PW);
-	cudaBuffer<uint32_t> sieveBuf[2];
-	cudaBuffer<uint32_t> sieveOff[2];
+  cudaBuffer<uint32_t> sieveBuf[2];
+  cudaBuffer<uint32_t> sieveOff[2];
   cudaBuffer<fermat_t> sieveBuffers[SW][FERMAT_PIPELINES][2];
   cudaBuffer<uint32_t> candidatesCountBuffers[SW][2];
   pipeline_t fermat320;
   pipeline_t fermat352;
-	CPrimalityTestParamsCuda testParams;
-	std::vector<fermat_t> candis;
+  CPrimalityTestParamsCuda testParams;
+  std::vector<fermat_t> candis;
   unsigned numHashCoeff = 32768;
 
   cudaBuffer<uint32_t> primeBuf[maxHashPrimorial];
@@ -301,21 +301,21 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
     primorial[i] = p;
   }
   
-	{
-		unsigned primorialbits = mpz_sizeinbase(primorial[0].get_mpz_t(), 2);
-		mpz_class sievesize = mConfig.SIZE*32*mConfig.STRIPES;
-		unsigned sievebits = mpz_sizeinbase(sievesize.get_mpz_t(), 2);
+  {
+    unsigned primorialbits = mpz_sizeinbase(primorial[0].get_mpz_t(), 2);
+    mpz_class sievesize = mConfig.SIZE*32*mConfig.STRIPES;
+    unsigned sievebits = mpz_sizeinbase(sievesize.get_mpz_t(), 2);
     LOG_F(INFO, "GPU %d: primorial = %s (%d bits)", mID, primorial[0].get_str(10).c_str(), primorialbits);
     LOG_F(INFO, "GPU %d: sieve size = %s (%d bits)", mID, sievesize.get_str(10).c_str(), sievebits);
-	}
+  }
   
   CUDA_SAFE_CALL(hashmod.midstate.init(8, false));
   CUDA_SAFE_CALL(hashmod.found.init(128, false));
   CUDA_SAFE_CALL(hashmod.primorialBitField.init(128, false));
   CUDA_SAFE_CALL(hashmod.count.init(1, false));
   CUDA_SAFE_CALL(hashBuf.init(PW*mConfig.N, false));
-	
-	for(int sieveIdx = 0; sieveIdx < SW; ++sieveIdx) {
+  
+  for(int sieveIdx = 0; sieveIdx < SW; ++sieveIdx) {
     for(int instIdx = 0; instIdx < 2; ++instIdx){
       for (int pipelineIdx = 0; pipelineIdx < FERMAT_PIPELINES; pipelineIdx++)
         CUDA_SAFE_CALL(sieveBuffers[sieveIdx][pipelineIdx][instIdx].init(MSO, true));
@@ -323,14 +323,14 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
       CUDA_SAFE_CALL(candidatesCountBuffers[sieveIdx][instIdx].init(FERMAT_PIPELINES, false)); // CL_MEM_ALLOC_HOST_PTR
     }
   }
-	
-	for(int k = 0; k < 2; ++k){
+  
+  for(int k = 0; k < 2; ++k){
     CUDA_SAFE_CALL(sieveBuf[k].init(mConfig.SIZE*mConfig.STRIPES/2*mConfig.WIDTH, true));
     CUDA_SAFE_CALL(sieveOff[k].init(mConfig.PCOUNT*mConfig.WIDTH, true));
-	}
-	
+  }
+  
   CUDA_SAFE_CALL(final.info.init(MFS/(4*mDepth), false)); // CL_MEM_ALLOC_HOST_PTR
-  CUDA_SAFE_CALL(final.count.init(1, false));	 // CL_MEM_ALLOC_HOST_PTR
+  CUDA_SAFE_CALL(final.count.init(1, false));   // CL_MEM_ALLOC_HOST_PTR
 
   FermatInit(fermat320, MFS);
   FermatInit(fermat352, MFS);    
@@ -354,50 +354,50 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
 
 
         int loadworkaccount = 0;
-	bool run = true;
-	while(run) {
-		{
-			time_t currtime = time(0);
-			time_t elapsed = currtime - time1;
-			if(elapsed > 11){                      
-				time1 = currtime;
-			}
-			
-			elapsed = currtime - time2;
-			if(elapsed > 15){
-				stats.fps = testCount / elapsed;
-				time2 = currtime;
-				testCount = 0;
-			}
-		}
-		
-		stats.primeprob = pow(double(primeCount)/double(fermatCount), 1./mDepth)
-				- 0.0003 * (double(mConfig.TARGET-1)/2. - double(mDepth-1)/2.);
-		stats.cpd = 24.*3600. * double(stats.fps) * pow(stats.primeprob, mConfig.TARGET);
-		
-		// get work
-		bool reset = false;
-		{
+  bool run = true;
+  while(run) {
+    {
+      time_t currtime = time(0);
+      time_t elapsed = currtime - time1;
+      if(elapsed > 11){                      
+        time1 = currtime;
+      }
+      
+      elapsed = currtime - time2;
+      if(elapsed > 15){
+        stats.fps = testCount / elapsed;
+        time2 = currtime;
+        testCount = 0;
+      }
+    }
+    
+    stats.primeprob = pow(double(primeCount)/double(fermatCount), 1./mDepth)
+        - 0.0003 * (double(mConfig.TARGET-1)/2. - double(mDepth-1)/2.);
+    stats.cpd = 24.*3600. * double(stats.fps) * pow(stats.primeprob, mConfig.TARGET);
+    
+    // get work
+    bool reset = false;
+    {
       workTemplate = gbp->get(0, workTemplate, &dataId, &hasChanged);
-			if(workTemplate && hasChanged){
+      if(workTemplate && hasChanged){
         run = true;//ReceivePub(work, worksub);
-				reset = true;
-			}
-		}
-		if(!run)
-			break;
-		
-		// reset if new work
-		if(reset){
+        reset = true;
+      }
+    }
+    if(!run)
+      break;
+    
+    // reset if new work
+    if(reset){
       hashes.clear();
-			hashmod.count[0] = 0;
-			fermat320.bsize = 0;
-			fermat320.buffer[0].count[0] = 0;
-			fermat320.buffer[1].count[0] = 0;
+      hashmod.count[0] = 0;
+      fermat320.bsize = 0;
+      fermat320.buffer[0].count[0] = 0;
+      fermat320.buffer[1].count[0] = 0;
       fermat352.bsize = 0;
       fermat352.buffer[0].count[0] = 0;
       fermat352.buffer[1].count[0] = 0;      
-			final.count[0] = 0;
+      final.count[0] = 0;
       
       for(int sieveIdx = 0; sieveIdx < SW; ++sieveIdx) {
         for(int instIdx = 0; instIdx < 2; ++instIdx) {
@@ -416,24 +416,24 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
       blockheader.time = workTemplate->curtime;
       blockheader.bits = *(uint32_t*)workTemplate->diffbits;
       blockheader.nonce = 1;
-			testParams.nBits = blockheader.bits;
-			
-			unsigned target = TargetGetLength(blockheader.bits);
+      testParams.nBits = blockheader.bits;
+      
+      unsigned target = TargetGetLength(blockheader.bits);
       precalcSHA256(&blockheader, hashmod.midstate._hostData, &precalcData);
       hashmod.count[0] = 0;
       CUDA_SAFE_CALL(hashmod.midstate.copyToDevice(mHMFermatStream));
       CUDA_SAFE_CALL(hashmod.count.copyToDevice(mHMFermatStream));
-		}
+    }
 
-		// hashmod fetch & dispatch
-		{
- 			printf("got %d new hashes\n", hashmod.count[0]);
+    // hashmod fetch & dispatch
+    {
+       printf("got %d new hashes\n", hashmod.count[0]);
       fflush(stdout);
-			for(unsigned i = 0; i < hashmod.count[0]; ++i) {
-				hash_t hash;
-				hash.iter = iteration;
-				hash.time = blockheader.time;
-				hash.nonce = hashmod.found[i];
+      for(unsigned i = 0; i < hashmod.count[0]; ++i) {
+        hash_t hash;
+        hash.iter = iteration;
+        hash.time = blockheader.time;
+        hash.nonce = hashmod.found[i];
         uint32_t primorialBitField = hashmod.primorialBitField[i];
         uint32_t primorialIdx = primorialBitField >> 16;
         uint64_t realPrimorial = 1;
@@ -449,10 +449,9 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
         unsigned hashMultiplierSize = mpz_sizeinbase(mpzHashMultiplier.get_mpz_t(), 2);
         mpz_import(mpzRealPrimorial.get_mpz_t(), 2, -1, 4, 0, 0, &realPrimorial);
 
-				block_t b = blockheader;
+        block_t b = blockheader;
           b.nonce = hash.nonce;
 
-          //printf("before hash\n");
           SHA_256 sha;
           sha.init();
           sha.update((const unsigned char*)&b, sizeof(b));
@@ -460,46 +459,44 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
           sha.init();
           sha.update((const unsigned char*)&hash.hash, sizeof(uint256));
           sha.final((unsigned char*)&hash.hash);
-          
-          //printf("hash %d\n", hash.hash < (uint256(1) << 255));
-				if(hash.hash < (uint256(1) << 255)){
+
+        if(hash.hash < (uint256(1) << 255)){
           LOG_F(WARNING, "hash does not meet minimum.\n");
-					stats.errors++;
-					continue;
-				}
-				
-				mpz_class mpzHash;
-				mpz_set_uint256(mpzHash.get_mpz_t(), hash.hash);
+          stats.errors++;
+          continue;
+        }
+        
+        mpz_class mpzHash;
+        mpz_set_uint256(mpzHash.get_mpz_t(), hash.hash);
         if(!mpz_divisible_p(mpzHash.get_mpz_t(), mpzRealPrimorial.get_mpz_t())){
           LOG_F(WARNING, "mpz_divisible_ui_p failed.\n");
-					stats.errors++;
-					continue;
-				}
-				
-				hash.primorialIdx = primorialIdx;
+          stats.errors++;
+          continue;
+        }
+        
+        hash.primorialIdx = primorialIdx;
         hash.primorial = mpzHashMultiplier;
         hash.shash = mpzHash * hash.primorial;       
 
         unsigned hid = hashes.push(hash);
         memset(&hashBuf[hid*mConfig.N], 0, sizeof(uint32_t)*mConfig.N);
         mpz_export(&hashBuf[hid*mConfig.N], 0, -1, 4, 0, 0, hashes.get(hid).shash.get_mpz_t());        
-			}
+      }
 
-			if (hashmod.count[0])
+      if (hashmod.count[0])
         CUDA_SAFE_CALL(hashBuf.copyToDevice(mSieveStream));
 
-			hashmod.count[0] = 0;
-			
+      hashmod.count[0] = 0;
+      
       int numhash = ((int)(16*mSievePerRound) - (int)hashes.remaining()) * numHashCoeff;
 
-			printf("numhash is %d, mLSize %u\n", numhash, mLSize);
       if(numhash > 0){
         numhash += mLSize - numhash % mLSize;
-				if(blockheader.nonce > (1u << 31)){
-					blockheader.time += mThreads;
-					blockheader.nonce = 1;
+        if(blockheader.nonce > (1u << 31)){
+          blockheader.time += mThreads;
+          blockheader.nonce = 1;
           precalcSHA256(&blockheader, hashmod.midstate._hostData, &precalcData);
-				}
+        }
 
         CUDA_SAFE_CALL(hashmod.midstate.copyToDevice(mHMFermatStream));
         CUDA_SAFE_CALL(hashmod.count.copyToDevice(mHMFermatStream));
@@ -529,14 +526,14 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
                                       mLSize, 1, 1,
                                       0, mHMFermatStream, arguments, 0));
         
-				blockheader.nonce += numhash;
-			}
-		}
+        blockheader.nonce += numhash;
+      }
+    }
 
-		int ridx = iteration % 2;
-		int widx = ridx xor 1;
-		
-		// sieve dispatch    
+    int ridx = iteration % 2;
+    int widx = ridx xor 1;
+    
+    // sieve dispatch    
       for (unsigned i = 0; i < mSievePerRound; i++) {
         if(hashes.empty()){
           if (!reset) {
@@ -565,7 +562,7 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
                                         mConfig.PCOUNT/mLSize, 1, 1,                                
                                         mLSize, 1, 1,
                                         0, mSieveStream, arguments, 0));          
-				}
+        }
 
         {
           void *arguments[] = {
@@ -594,7 +591,7 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
           
         }
 
-				{
+        {
           uint32_t multiplierSize = mpz_sizeinbase(hashes.get(hid).shash.get_mpz_t(), 2);
           void *arguments[] = {
             &sieveBuf[0]._deviceData,
@@ -613,20 +610,19 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
                                         0, mSieveStream, arguments, 0));
           
           CUDA_SAFE_CALL(cuEventRecord(sieveEvent, mSieveStream)); 
-				}
-			}
-		
+        }
+      }
     
-		// get candis
-		int numcandis = final.count[0];
-		numcandis = std::min(numcandis, (int)final.info._size);
-		numcandis = std::max(numcandis, 0);
-    printf("got %d new candis\n", numcandis);
-		candis.resize(numcandis);
-		primeCount += numcandis;
-		if(numcandis)
-			memcpy(&candis[0], final.info._hostData, numcandis*sizeof(fermat_t));
-		
+    
+    // get candis
+    int numcandis = final.count[0];
+    numcandis = std::min(numcandis, (int)final.info._size);
+    numcandis = std::max(numcandis, 0);
+    candis.resize(numcandis);
+    primeCount += numcandis;
+    if(numcandis)
+      memcpy(&candis[0], final.info._hostData, numcandis*sizeof(fermat_t));
+    
     final.count[0] = 0;
     CUDA_SAFE_CALL(final.count.copyToDevice(mHMFermatStream));
     FermatDispatch(fermat320, sieveBuffers, candidatesCountBuffers, 0, ridx, widx, testCount, fermatCount, mFermatKernel320, mSievePerRound);
@@ -661,36 +657,32 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
              
       LOG_F(WARNING, "increase sieves per round to %u", mSievePerRound);
     }
-		
-		// check candis
-		if(candis.size()){
-  		printf("checking %d candis\n", (int)candis.size());
-			mpz_class chainorg;
-			mpz_class multi;
-			for(unsigned i = 0; i < candis.size(); ++i){
-				
-				fermat_t& candi = candis[i];
-				hash_t& hash = hashes.get(candi.hashid);
-				
-				unsigned age = iteration - hash.iter;
-				if(age > PW/2)
+    
+    // check candis
+    if(candis.size()){
+      mpz_class chainorg;
+      mpz_class multi;
+      for(unsigned i = 0; i < candis.size(); ++i){
+        
+        fermat_t& candi = candis[i];
+        hash_t& hash = hashes.get(candi.hashid);
+        
+        unsigned age = iteration - hash.iter;
+        if(age > PW/2)
           LOG_F(WARNING, "candidate age > PW/2 with %d", age);
-				
-				multi = candi.index;
-				multi <<= candi.origin;
-				chainorg = hash.shash;
-        printf("origin = %s\n", chainorg.get_str(10).c_str());
-				chainorg *= multi;
-				
-				testParams.nCandidateType = candi.type;
+        
+        multi = candi.index;
+        multi <<= candi.origin;
+        chainorg = hash.shash;
+        chainorg *= multi;
+        
+        testParams.nCandidateType = candi.type;
         bool isblock = ProbablePrimeChainTestFastCuda(chainorg, testParams, mDepth);
-				unsigned chainlength = TargetGetLength(testParams.nChainLength);
+        unsigned chainlength = TargetGetLength(testParams.nChainLength);
 
-				/*printf("candi %d: hashid=%d index=%d origin=%d type=%d length=%d\n",
-						i, candi.hashid, candi.index, candi.origin, candi.type, chainlength);*/
-				if(chainlength >= TargetGetLength(blockheader.bits)){
+        if(chainlength >= TargetGetLength(blockheader.bits)){
           printf("candis[%d] = %s, chainlength %u\n", i, chainorg.get_str(10).c_str(), chainlength);
-					PrimecoinBlockHeader work;
+          PrimecoinBlockHeader work;
           work.version = blockheader.version;
           char blkhex[128];
           _blkmk_bin2hex(blkhex, workTemplate->prevblk, 32);
@@ -707,12 +699,12 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
           work.multiplier[0] = buffer[3];
           std::reverse_copy(buffer+4, buffer+4+buffer[3], work.multiplier+1);
           submit->submitBlock(workTemplate, work, dataId);
-					
+          
           LOG_F(1, "GPU %d found share: %d-ch type %d", mID, chainlength, candi.type+1);
-					if(isblock)
+          if(isblock)
             LOG_F(1, "GPU %d found BLOCK!", mID);
-					
-				}else if(chainlength < mDepth){
+          
+        }else if(chainlength < mDepth){
           LOG_F(WARNING, "ProbablePrimeChainTestFast %ubits %d/%d", (unsigned)mpz_sizeinbase(chainorg.get_mpz_t(), 2), chainlength, mDepth);
           LOG_F(WARNING, "origin: %s", chainorg.get_str().c_str());
           LOG_F(WARNING, "type: %u", (unsigned)candi.type);
@@ -728,17 +720,17 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
               i++;
             }
           }
-					stats.errors++;
-				}
-			}
-		}
+          stats.errors++;
+        }
+      }
+    }
 
-		if(MakeExit)
-			break;
-		
-		iteration++;
-	}
-	
+    if(MakeExit)
+      break;
+    
+    iteration++;
+  }
+  
   LOG_F(INFO, "GPU %d stopped.", mID);
 
 }
@@ -907,19 +899,19 @@ int main(int argc, char **argv) {
   SubmitContext *submit = new SubmitContext(0, gUrl, gUserName, gPassword);
 
   {
-		int np = sizeof(gPrimes)/sizeof(unsigned);
-		gPrimes2.resize(np*2);
-		for(int i = 0; i < np; ++i){
-			unsigned prime = gPrimes[i];
-			float fiprime = 1.f / float(prime);
-			gPrimes2[i*2] = prime;
-			memcpy(&gPrimes2[i*2+1], &fiprime, sizeof(float));
-		}
-	}
+    int np = sizeof(gPrimes)/sizeof(unsigned);
+    gPrimes2.resize(np*2);
+    for(int i = 0; i < np; ++i){
+      unsigned prime = gPrimes[i];
+      float fiprime = 1.f / float(prime);
+      gPrimes2[i*2] = prime;
+      memcpy(&gPrimes2[i*2+1], &fiprime, sizeof(float));
+    }
+  }
 
   unsigned clKernelLSize = 1024;
   unsigned clKernelLSizeLog2 = 10;
-	std::vector<CUDADeviceInfo> gpus;
+  std::vector<CUDADeviceInfo> gpus;
   int devicesNum = 0;
   CUDA_SAFE_CALL(cuInit(0));
   CUDA_SAFE_CALL(cuDeviceGetCount(&devicesNum));
@@ -928,19 +920,19 @@ int main(int argc, char **argv) {
   std::map<int,int> mDeviceMapRev;
 
   for (unsigned i = 0; i < devicesNum; i++) {
-			char name[128];
-			CUDADeviceInfo info;
-			mDeviceMap[i] = gpus.size();
-			mDeviceMapRev[gpus.size()] = i;
-			info.index = i;
-			CUDA_SAFE_CALL(cuDeviceGet(&info.device, i));
-			CUDA_SAFE_CALL(cuDeviceGetAttribute(&info.majorComputeCapability, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, info.device));
-			CUDA_SAFE_CALL(cuDeviceGetAttribute(&info.minorComputeCapability, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, info.device));
-			CUDA_SAFE_CALL(cuCtxCreate(&info.context, CU_CTX_SCHED_AUTO, info.device));
-			CUDA_SAFE_CALL(cuDeviceGetName(name, sizeof(name), info.device));
-			gpus.push_back(info);
+      char name[128];
+      CUDADeviceInfo info;
+      mDeviceMap[i] = gpus.size();
+      mDeviceMapRev[gpus.size()] = i;
+      info.index = i;
+      CUDA_SAFE_CALL(cuDeviceGet(&info.device, i));
+      CUDA_SAFE_CALL(cuDeviceGetAttribute(&info.majorComputeCapability, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, info.device));
+      CUDA_SAFE_CALL(cuDeviceGetAttribute(&info.minorComputeCapability, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, info.device));
+      CUDA_SAFE_CALL(cuCtxCreate(&info.context, CU_CTX_SCHED_AUTO, info.device));
+      CUDA_SAFE_CALL(cuDeviceGetName(name, sizeof(name), info.device));
+      gpus.push_back(info);
       LOG_F(INFO, "[%i] %s; Compute capability %i.%i", (int)gpus.size()-1, name, info.majorComputeCapability, info.minorComputeCapability);
-	}
+  }
 
   // generate kernel configuration file
   {
@@ -968,28 +960,28 @@ int main(int argc, char **argv) {
 
   std::string arguments = "";
   std::vector<CUmodule> modules;
-	modules.resize(gpus.size());
+  modules.resize(gpus.size());
   for (unsigned i = 0; i < gpus.size(); i++) {
-		char kernelname[64];
-		char ccoption[64];
-		sprintf(kernelname, "kernelxpm_gpu%u.ptx", gpus[i].index);
+    char kernelname[64];
+    char ccoption[64];
+    sprintf(kernelname, "kernelxpm_gpu%u.ptx", gpus[i].index);
         sprintf(ccoption, "--gpu-architecture=compute_%i%i", gpus[i].majorComputeCapability, gpus[i].minorComputeCapability);
     const char *options[] = { ccoption, arguments.c_str() };
-		CUDA_SAFE_CALL(cuCtxSetCurrent(gpus[i].context));
+    CUDA_SAFE_CALL(cuCtxSetCurrent(gpus[i].context));
     if (!cudaCompileKernel(kernelname,
-				{ "xpm/cuda/config.cu", "xpm/cuda/procs.cu", "xpm/cuda/fermat.cu", "xpm/cuda/sieve.cu", "xpm/cuda/sha256.cu", "xpm/cuda/benchmarks.cu"},
-				options,
+        { "xpm/cuda/config.cu", "xpm/cuda/procs.cu", "xpm/cuda/fermat.cu", "xpm/cuda/sieve.cu", "xpm/cuda/sha256.cu", "xpm/cuda/benchmarks.cu"},
+        options,
         arguments.empty() ? 1 : 2,
-				&modules[i],
+        &modules[i],
         gpus[i].majorComputeCapability,
         gpus[i].minorComputeCapability,
-				true)) {
-			return false;
-		}
+        true)) {
+      return false;
+    }
   }
   int depth = 5 - 1;
-	depth = std::max(depth, 2);
-	depth = std::min(depth, 5);
+  depth = std::max(depth, 2);
+  depth = std::min(depth, 5);
   for (unsigned i = 0; i < 0; i++) {
     cudaRunBenchmarks(gpus[i].context, gpus[i].device, modules[i], depth, clKernelLSize);
   }

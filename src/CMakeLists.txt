@@ -20,7 +20,6 @@ include(CheckTypeSize)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
 
 if (WIN32)
-  include_directories(${NCURSES_INCLUDE_DIRECTORY}/ncurses)
   add_definitions(-DWIN32 -DCURL_STATICLIB -DPTW32_STATIC_LIB -D__USE_MINGW_ANSI_STDIO=0)
   set(OS_WINDOWS 1)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")

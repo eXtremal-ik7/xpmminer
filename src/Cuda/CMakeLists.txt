@@ -89,7 +89,6 @@ target_link_libraries(xpmcuda
   ${OPENSSL_SSL_LIBRARY}
   ${CURL_LIBRARY}
   ${JANSSON_LIBRARY}
-  ${NCURSES_LIBRARY}
   ${CUDA_driver_LIBRARY}
   ${CUDA_nvrtc_LIBRARY}
   )

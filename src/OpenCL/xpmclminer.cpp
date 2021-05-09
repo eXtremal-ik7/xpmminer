@@ -8,13 +8,11 @@
 #include "utils.h"
 
 #include <openssl/bn.h>
-#include <ncurses.h>
 
 #include "getopt.h"
 #include <stdlib.h>
 #include <algorithm>
 #include <memory>
-
 
 #ifdef DEBUG_MINING_AMD_OPENCL
 extern "C" {
@@ -104,7 +102,7 @@ struct MineContext {
   uint64_t totalRoundsNum; 
   uint64_t foundChains[20];
   double speed;  
-  WINDOW *log;
+  void *log;
 };
 
 
@@ -180,7 +178,7 @@ void *mine(void *arg)
           ctx->foundChains[chainLength]++;
           if (chainLength == chainLengthFromBits(work.bits)) {
             // TODO: check block
-            wprintw(ctx->log, "chain found!\n");
+            printf("chain found!\n");
             work.nonce = results.resultNonces[i];
             copyMultiplierToBlock(work, primorial, results.resultMultipliers[i]);
             ctx->submit->submitBlock(workTemplate, work, dataId); 
@@ -378,9 +376,8 @@ int main(int argc, char **argv)
     return 0;
   }
  
-  WINDOW *display = initscr();
-  WINDOW *log = newwin(30, 160, 3 + ctx.devicesNum + 12, 0);
-  scrollok(log, TRUE);  
+  void *display = 0;
+  void *log = 0;
  
   GetBlockTemplateContext gbp(log, gUrl, gUserName, gPassword, gWallet, 4, ctx.devicesNum, extraNonce);
   gbp.run();
@@ -410,9 +407,8 @@ int main(int argc, char **argv)
     char buffer[80];
     time (&rawtime);
     timeinfo = localtime(&rawtime);
-    strftime(buffer,80, "%d-%m-%Y %H:%M:%S", timeinfo);  
-    wmove(display, 0, 0);
-    wprintw(display, " ** xpmclminer started %s %s %s worker %i **\n", buffer, gUrl, gWallet, extraNonce);
+    strftime(buffer,80, "%d-%m-%Y %H:%M:%S", timeinfo);
+    printf(" ** xpmclminer started %s %s %s worker %i **\n", buffer, gUrl, gWallet, extraNonce);
   }  
   
   unsigned counter = 0;
@@ -423,9 +419,8 @@ int main(int argc, char **argv)
     double speed = 0.0;
     double averageSpeed = 0.0;
     memset(foundChains, 0, sizeof(foundChains));
-    
-    wmove(display, 1, 0);
-    wprintw(display, " ** block: %u, difficulty: %.3lf", gbp.getBlockHeight(), gbp.getDifficulty());
+
+    printf(" ** block: %u, difficulty: %.3lf", gbp.getBlockHeight(), gbp.getDifficulty());
     timeMark currentPoint = getTimeMark();    
     uint64_t elapsedTime = usDiff(workBeginPoint, currentPoint);
     for (int i = 0; i < ctx.devicesNum; i++) {
@@ -435,24 +430,19 @@ int main(int argc, char **argv)
       double threadAvgSpeed = (sieveSizeInGb*mineCtx[i].totalRoundsNum) / (elapsedTime / 1000000.0);
       speed += mineCtx[i].speed;
       averageSpeed += threadAvgSpeed;
-      
-      wmove(display, i+3, 0);
-      wprintw(display, "[%u] %.3lfG, average: %.3lfG", i+1, mineCtx[i].speed, threadAvgSpeed);
+
+      printf("[%u] %.3lfG, average: %.3lfG", i+1, mineCtx[i].speed, threadAvgSpeed);
     }
   
-    wmove(display, ctx.devicesNum+3, 0);
-    wprintw(display, " * speed: %.3lfG, average: %.3lfG\n", speed, averageSpeed);
+    printf(" * speed: %.3lfG, average: %.3lfG\n", speed, averageSpeed);
     unsigned chIdx;
     for (chIdx = 1; chIdx < MaxChainLength && foundChains[chIdx]; chIdx++) {
-      wmove(display, ctx.devicesNum+3 + chIdx+1, 0);
-      wprintw(display, "   * chains/%u: %llu %.3lf/sec ",
+
+      printf("   * chains/%u: %llu %.3lf/sec ",
               chIdx, foundChains[chIdx], foundChains[chIdx] / (elapsedTime / 1000000.0));
       if (chIdx >= 7)
-        wprintw(display, "%.3lf/hour ", foundChains[chIdx] / (elapsedTime / 1000000.0) * 3600.0);
+        printf("%.3lf/hour ", foundChains[chIdx] / (elapsedTime / 1000000.0) * 3600.0);
     }
-    
-    wrefresh(display);
-    wrefresh(log);
 
     // Workaround about AMD Catalyst bug (prevents performance dropping on
     // Multi-GPU configurations

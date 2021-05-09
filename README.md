@@ -21,7 +21,6 @@ But before this, you must fetch all dependencies:
  - OpenSSL
  - curl
  - jansson
- - ncurses
  - OpenCL SDK
  - GPU drivers (Catalyst 14.1 or later)
 
