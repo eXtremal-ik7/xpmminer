@@ -5,8 +5,8 @@ Open-source primecoin(XPM) GPU & CPU miner (http://primecoin.io/). Only solo min
 
 1 Requirements
 
-- OS supported: Linux (Windows support coming soon), but you can try build on other Unix-like systems
-- GPU manifacturer supported: AMD (NVidia is untested now)
+- OS supported: Linux, Windows
+- GPU manifacturer supported: NVidia (AMD is untested now)
 
 2 Performance
 
@@ -14,37 +14,7 @@ Now miner can be slow than concurrents.. With this miner Radeon R9 290X @ 1120/1
 
 3 Building
 
-3.1 Prepare to build
-
-But before this, you must fetch all dependencies:
- - gmp
- - OpenSSL
- - curl
- - jansson
- - OpenCL SDK
- - GPU drivers (Catalyst 14.1 or later)
-
-AMD APP SDK contains broken OpenCL compiler, it shows segmentation fault when kernel.cl compiling. Workaround is using compiler (libamdocl64.so) from Catalyst package. On Ubuntu you can run this shell command:
-
-sudp cp /usr/lib/fglrx/libamdocl64.so /opt/AMDAPP/lib/x86_64
- - /usr/lib/fglrx - driver installation path
- - /opt/AMDAPP - AMD APP SDK installation path
-
-
-3.2 Build
-
-Miner uses CMake build system.
-
-cd 'project root directory'<BR>
-mkdir build<BR>
-cd build<BR>
-cmake -DCMAKE_BUILD_TYPE=Release ../src<BR>
-make<BR>
-make install
-
-CMake may be failed found OpenCL SDK. In this case, setup path to SDK manually:
-
-cmake ../src -DOPENCL_INCLUDE_DIRS=/opt/AMDAPP/include -DOPENCL_LIBRARIES=/opt/AMDAPP/lib/x86_64/libOpenCL.so -DCMAKE_BUILD_TYPE=Release
+in linux see contrib/README.md
 
 4 Usage
 
@@ -52,11 +22,15 @@ cmake ../src -DOPENCL_INCLUDE_DIRS=/opt/AMDAPP/include -DOPENCL_LIBRARIES=/opt/A
   primecoind -rpcuser=userName -rpcpassword=password<BR>
   primecoin-qt -rpcuser=userName -rpcpassword=password -server<BR>
   
-- Run CPU or GPU miner:
-
-./xpmclminer -u <userName> -p <password> -w Ac9ycgpEL4vzXRndS93Q7A7VGBHof1Jqzy (paste you own wallet)
-
+- Run CPU or GPU miner,
+method 1
+./miner --url RPCaddress --user primecoinrpc --pass PASSWORD   --wallet youaddress
 for other options, see --help
+
+method 2
+modify xpmminercpu (in linux cpu) / xpmminernv (in linux NVidia) / xpmminernv.bat (in windows NVidia)
+use you RPC address, rpcuser, rpcpassword and you wallet address to replace the corresponding contents. Then run these files. For example, in windows, run `.\xpmminernv.bat` in power shell.
+
 
 5 Donations
 
