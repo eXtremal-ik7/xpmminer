@@ -2,7 +2,7 @@ set(LIBRARIES
   ${GMP_LIBRARY}
 )
 if (WIN32)
-  set(LIBRARIES ${LIBRARIES} ws2_32 advapi32)
+  set(LIBRARIES ${LIBRARIES} ws2_32 advapi32 wldap32)
 else()
   set(LIBRARIES ${LIBRARIES} dl)
 endif()
@@ -49,7 +49,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 endif()
 
 if (CUDA_FOUND)
-  find_library(CUDA_driver_LIBRARY cuda
+  find_library(CUDA_DRIVER_LIBRARY cuda
     ${CUDA_TOOLKIT_ROOT_DIR}/lib64
     ${CUDA_TOOLKIT_ROOT_DIR}/lib/x64
   )
@@ -89,7 +89,7 @@ target_link_libraries(xpmcuda
   ${OPENSSL_SSL_LIBRARY}
   ${CURL_LIBRARY}
   ${JANSSON_LIBRARY}
-  ${CUDA_driver_LIBRARY}
+  ${CUDA_DRIVER_LIBRARY}
   ${CUDA_nvrtc_LIBRARY}
   )
 

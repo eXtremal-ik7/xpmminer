@@ -297,7 +297,7 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
     CUDA_SAFE_CALL(primeBuf2[i].copyToDevice(&gPrimes2[2*(mPrimorial+i)+2]));
     mpz_class p = 1;
     for(unsigned j = 0; j <= mPrimorial+i; j++)
-      p *= gPrimes[j];    
+      p *= gPrimes[j];
     primorial[i] = p;
   }
   
@@ -353,7 +353,7 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
   }
 
 
-        int loadworkaccount = 0;
+  int loadworkaccount = 0;
   bool run = true;
   while(run) {
     {
@@ -378,7 +378,8 @@ void PrimeMiner::Mining(GetBlockTemplateContext* gbp, SubmitContext* submit) {
     // get work
     bool reset = false;
     {
-      workTemplate = gbp->get(0, workTemplate, &dataId, &hasChanged);
+      while ( !(workTemplate = gbp->get(0, workTemplate, &dataId, &hasChanged)) )
+        usleep(100);
       if(workTemplate && hasChanged){
         run = true;//ReceivePub(work, worksub);
         reset = true;

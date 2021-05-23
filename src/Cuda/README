@@ -1,4 +1,4 @@
-cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$DEP  -DSTATIC_BUILD=ON -DOpenCL_INCLUDE_DIR=$DEP/toolkit/include -DOpenCL_LIBRARY=$DEP/toolkit/lib64/libOpenCL.so  -DCUDA_driver_LIBRARY=$DEP/toolkit/lib64/stubs/libcuda.so -DCUDA_CUDA_LIBRARY=$DEP/toolkit/lib64/libcudart.so -DCUDA_nvrtc_LIBRARY=$DEP/toolkit/lib64/libnvrtc.so  -DCUDA_TOOLKIT_ROOT_DIR=$DEP/toolkit
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$DEP  -DSTATIC_BUILD=ON -DOpenCL_INCLUDE_DIR=$DEP/toolkit/include -DOpenCL_LIBRARY=$DEP/toolkit/lib64/libOpenCL.so  -DCUDA_DRIVER_LIBRARY=$DEP/toolkit/lib64/stubs/libcuda.so -DCUDA_CUDA_LIBRARY=$DEP/toolkit/lib64/libcudart.so -DCUDA_nvrtc_LIBRARY=$DEP/toolkit/lib64/libnvrtc.so  -DCUDA_TOOLKIT_ROOT_DIR=$DEP/toolkit
 to run
 1, copy libnvrtc.so.11.2 libnvrtc-builtins.so.11.2 to running directory
 2, mkdir -p xpm/cuda

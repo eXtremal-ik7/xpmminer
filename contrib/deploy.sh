@@ -3,7 +3,7 @@ set -e
 VERSION="10.5-beta2"
 
 
-CUDA10_INSTALLER="cuda_11.3.0_465.89_win10.exe"
+CUDA10_INSTALLER="cuda_11.2.1_461.09_win10.exe"
 
 if docker inspect --type=image xpmclient-$VERSION > /dev/null 2> /dev/null; then
   echo "xpmclient-$VERSION image already exists"
@@ -49,8 +49,8 @@ fi
 if [ ! -f gmp-6.1.2.tar.lz ]; then
   wget https://gmplib.org/download/gmp/gmp-6.1.2.tar.lz
 fi
-if [ ! -f openssl-1.1.0.tar.gz ]; then
-  wget https://www.openssl.org/source/old/1.1.0/openssl-1.1.0.tar.gz
+if [ ! -f openssl-1.0.2.tar.gz ]; then
+  wget https://www.openssl.org/source/old/1.0.2/openssl-1.0.2.tar.gz
 fi
 if [ ! -f curl-7.68.0.tar.gz ]; then
   wget https://curl.se/download/curl-7.68.0.tar.gz
@@ -68,7 +68,7 @@ docker exec $CONTAINER mkdir /home/user/build/deps-linux
 docker exec $CONTAINER mkdir /home/user/build/deps-win32
 docker exec $CONTAINER mkdir /home/user/build/xpmminer
 docker cp gmp-6.1.2.tar.lz $CONTAINER:/home/user/build
-docker cp openssl-1.1.0.tar.gz $CONTAINER:/home/user/build
+docker cp openssl-1.0.2.tar.gz $CONTAINER:/home/user/build
 docker cp curl-7.68.0.tar.gz $CONTAINER:/home/user/build
 docker cp jansson-2.11.tar.gz $CONTAINER:/home/user/build
 docker cp CLRX-mirror $CONTAINER:/home/user/build
@@ -80,4 +80,6 @@ docker exec $CONTAINER /home/user/build/build.sh
 
 # Grab artifacts
 rm -rf distr && mkdir distr && cd distr
+docker cp $CONTAINER:/home/user/build/xpmminer/x86_64-Linux/xpmminer-cpu-$VERSION-linux.tar.gz .
 docker cp $CONTAINER:/home/user/build/xpmminer/x86_64-Linux/xpmminer-cuda-$VERSION-linux.tar.gz .
+docker cp $CONTAINER:/home/user/build/xpmminer/x86_64-w64-mingw32/Cuda/xpmminer-cuda-$VERSION-win64.zip .
